@@ -135,7 +135,7 @@
           <plugin>
             <groupId>com.gluonhq</groupId>
             <artifactId>gluonfx-maven-plugin</artifactId>
-            <version>1.0.29</version>
+            <version>1.0.24</version><!-- Substrate 0.0.64: matches the newest public Gluon GraalVM (23+25.1-dev, 2024-09) -->
             <configuration>
               <!-- no main method is run: the library is entered through the @CEntryPoint functions -->
               <mainClass>acme.core.runtime.SharedLibMain</mainClass>
