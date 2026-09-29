@@ -46,7 +46,8 @@ final class AcmeClientTests: XCTestCase {
         slow.cancel()
         do { _ = try await slow.value; XCTFail() } catch is CancellationError {}
         XCTAssertLessThan(Date().timeIntervalSince(start), 2)
-        XCTAssertEqual(try await c.getCustomer(id: "4711").id, "4711")
+        let customer = try await c.getCustomer(id: "4711") // no `await` inside XCTAssert autoclosures
+        XCTAssertEqual(customer.id, "4711")
     }
 
     func testStreamAndStreamCancellation() async throws {
@@ -107,7 +108,8 @@ final class AcmeClientTests: XCTestCase {
     func testLargePayloadAndUnicode() async throws {
         let c = try await connected()
         let payload = (0..<(4 << 20)).map { UInt8(truncatingIfNeeded: $0 &* 31) }
-        XCTAssertEqual(try await c.sendCommand(command: Command(name: "echo", payload: payload)).payload, payload)
+        let echoed = try await c.sendCommand(command: Command(name: "echo", payload: payload))
+        XCTAssertEqual(echoed.payload, payload)
         let name = "Jürgen Groß 张伟 🚀👩‍💻"
         let created = try await c.createCustomer(name: name, email: nil)
         XCTAssertEqual(created.name, name)

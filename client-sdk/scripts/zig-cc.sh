@@ -5,6 +5,7 @@ args=()
 for a in "$@"; do
   case "$a" in
     --target=*|-Wl,--as-needed|-Wl,-Bdynamic|-Wl,-Bstatic) ;; # rustc flags zig cc rejects/doesn't need
+    -Wl,--fix-cortex-a53-843419) ;; # aarch64 erratum workaround rustc adds; zig's lld rejects the flag
     *) args+=("$a") ;;
   esac
 done

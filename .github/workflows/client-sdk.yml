@@ -20,13 +20,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: "8.0.x" }
+      # GraalVM first: it also puts its (JDK 21) java/javac on PATH; the setup-java step
+      # afterwards puts JDK 25 in front again. native-image is found via GRAALVM_HOME.
+      - uses: graalvm/setup-graalvm@v1 # native-image for the gematik:pki Java core
+        with: { java-version: "21", distribution: graalvm, set-java-home: false }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "25" }
       - uses: actions/setup-go@v5
         with: { go-version: "1.24" }
       - uses: dart-lang/setup-dart@v1
-      - uses: graalvm/setup-graalvm@v1 # native-image for the gematik:pki Java core
-        with: { java-version: "21", distribution: graalvm, set-java-home: false }
       - run: pip install ziglang==0.16.0
       - run: (cd sdk/dart && dart pub get && dart analyze --fatal-infos)
       - run: (cd packages/zero/sdk/dart && dart pub get && dart analyze --fatal-infos)
