@@ -72,7 +72,7 @@ for core in go rust csharp; do
 done
 
 if have swift; then
-  run "Swift app (Go core)" bash -c "cd '$PKG/sdk/swift' && swift test -Xlinker -L'$B/go'"
+  run "Swift app (Go core)" env LD_LIBRARY_PATH="$B/go" DYLD_LIBRARY_PATH="$B/go" bash -c "cd '$PKG/sdk/swift' && swift test -Xlinker -L'$B/go'"
 else SUMMARY+=("SKIP  Swift (no swift toolchain here; generated + runtime code not compiled)"); fi
 
 echo
