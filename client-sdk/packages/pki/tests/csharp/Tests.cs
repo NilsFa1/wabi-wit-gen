@@ -58,6 +58,16 @@ static class Program
         await Test("invalid input", async () =>
             Check(await ErrorOf(() => verifier.VerifyAsync(new byte[] { 1, 2, 3 }, aut, false)) is PkiError.InvalidInput, "invalid input"));
 
+        await Test("TSL info, swap and cache statistics", async () =>
+        {
+            var info = verifier.TslInfo();
+            Check(info.Id == "TSL-PoC" && info.SequenceNumber == 1 && info.NextUpdate == "2046-09-29T00:00:00Z"
+                && info.Sha256.Length == 64 && !info.Expired, info.ToString());
+            Check(await ErrorOf(() => Task.FromResult(verifier.SetTsl(new byte[] { 1, 2, 3 }))) is PkiError.InvalidInput, "garbage TSL rejected");
+            Check(verifier.SetTsl(Load("tsl.xml")) == info && verifier.TslInfo() == info, "same TSL again");
+            Check(verifier.CacheStats().OcspEntries == 0, "no OCSP without with-ocsp");
+        });
+
         await Test("concurrent verifications", async () =>
         {
             var all = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => verifier.VerifyAsync(Load("valid.der"), aut, false)));

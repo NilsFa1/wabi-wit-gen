@@ -23,6 +23,10 @@ internal static class MethodIds
 {
     public const uint CertificateVerifierConstructor = 0x0100;
     public const uint CertificateVerifierVerify = 0x0101;
+    public const uint CertificateVerifierTslInfo = 0x0102;
+    public const uint CertificateVerifierSetTsl = 0x0103;
+    public const uint CertificateVerifierRefreshTsl = 0x0104;
+    public const uint CertificateVerifierCacheStats = 0x0105;
 }
 
 /// <summary>ABI status codes (abi/acme_abi.h).</summary>

@@ -73,6 +73,19 @@ public final class PkiTests {
                     check(code(errorOf(verifier.verify(load("unknown-ca.der"), aut, false))).equals("TE_1027_CA_CERT_MISSING"), "code"));
             test("invalid input", () ->
                     check(errorOf(verifier.verify(new byte[] {1, 2, 3}, aut, false)) instanceof PkiError.InvalidInput, "invalid input"));
+            test("TSL info, swap and cache statistics", () -> {
+                var info = verifier.tslInfo();
+                check(info.id().equals("TSL-PoC") && info.sequenceNumber() == 1 && info.nextUpdate().equals("2046-09-29T00:00:00Z")
+                        && info.sha256().length() == 64 && !info.expired(), info.toString());
+                try {
+                    verifier.setTsl(new byte[] {1, 2, 3});
+                    check(false, "garbage TSL accepted");
+                } catch (PkiException e) {
+                    check(e.error() instanceof PkiError.InvalidInput, "invalid input");
+                }
+                check(verifier.setTsl(load("tsl.xml")).equals(info) && verifier.tslInfo().equals(info), "same TSL again");
+                check(verifier.cacheStats().ocspEntries() == 0, "no OCSP without with-ocsp");
+            });
             test("concurrent verifications", () -> {
                 var all = new ArrayList<CompletableFuture<com.gematik.pki.Admission>>();
                 for (int i = 0; i < 16; i++) all.add(verifier.verify(load("valid.der"), aut, false));

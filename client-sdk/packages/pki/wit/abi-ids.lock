@@ -32,3 +32,17 @@ case       gematik:pki/types.pki-error.invalid-input              2
 group      gematik:pki/verifier.certificate-verifier              0x01
 method     gematik:pki/verifier.certificate-verifier.constructor  0x0100
 method     gematik:pki/verifier.certificate-verifier.verify       0x0101
+case       gematik:pki/types.pki-error.download-failed            3
+field      gematik:pki/types.tsl-info.id                          1
+field      gematik:pki/types.tsl-info.sequence-number             2
+field      gematik:pki/types.tsl-info.issue-date                  3
+field      gematik:pki/types.tsl-info.next-update                 4
+field      gematik:pki/types.tsl-info.sha256                      5
+field      gematik:pki/types.tsl-info.expired                     6
+field      gematik:pki/types.cache-stats.ocsp-hits                1
+field      gematik:pki/types.cache-stats.ocsp-misses              2
+field      gematik:pki/types.cache-stats.ocsp-entries             3
+method     gematik:pki/verifier.certificate-verifier.tsl-info     0x0102
+method     gematik:pki/verifier.certificate-verifier.set-tsl      0x0103
+method     gematik:pki/verifier.certificate-verifier.refresh-tsl  0x0104
+method     gematik:pki/verifier.certificate-verifier.cache-stats  0x0105

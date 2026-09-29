@@ -90,6 +90,7 @@ extension PkiError {
         switch self {
         case .verificationFailed(let x): w.writeArrayHeader(2); w.writeUInt(1); x.encode(to: w)
         case .invalidInput(let x): w.writeArrayHeader(2); w.writeUInt(2); w.writeString(x)
+        case .downloadFailed(let x): w.writeArrayHeader(2); w.writeUInt(3); w.writeString(x)
         }
     }
 
@@ -102,10 +103,90 @@ extension PkiError {
         switch tag {
         case 1 where n >= 2: v = .verificationFailed(try VerificationFailure.decode(from: r)); used = 2
         case 2 where n >= 2: v = .invalidInput(try r.readString()); used = 2
+        case 3 where n >= 2: v = .downloadFailed(try r.readString()); used = 2
         default: throw AcmeRuntimeError.protocolError("unknown case tag \(tag) for 'pki-error'")
         }
         for _ in used..<max(used, n) { try r.skip() }
         return v
+    }
+}
+
+extension TslInfo {
+    func encode(to w: MsgPackWriter) {
+        var n = 0
+        n += 1
+        n += 1
+        n += 1
+        n += 1
+        n += 1
+        n += 1
+        w.writeMapHeader(n)
+        w.writeUInt(1); w.writeString(self.id)
+        w.writeUInt(2); w.writeInt(Int64(self.sequenceNumber))
+        w.writeUInt(3); w.writeString(self.issueDate)
+        w.writeUInt(4); w.writeString(self.nextUpdate)
+        w.writeUInt(5); w.writeString(self.sha256)
+        w.writeUInt(6); w.writeBool(self.expired)
+    }
+
+    static func decode(from r: MsgPackReader) throws -> TslInfo {
+        let n = try r.readMapHeader()
+        var f1: String? = nil
+        var f2: Int64? = nil
+        var f3: String? = nil
+        var f4: String? = nil
+        var f5: String? = nil
+        var f6: Bool? = nil
+        for _ in 0..<n {
+            switch try r.readUInt(UInt32.self) {
+            case 1: f1 = try r.readString()
+            case 2: f2 = try r.readInt(Int64.self)
+            case 3: f3 = try r.readString()
+            case 4: f4 = try r.readString()
+            case 5: f5 = try r.readString()
+            case 6: f6 = try r.readBool()
+            default: try r.skip()
+            }
+        }
+        guard let v1 = f1 else { throw AcmeRuntimeError.protocolError("tsl-info: missing field 'id'") }
+        guard let v2 = f2 else { throw AcmeRuntimeError.protocolError("tsl-info: missing field 'sequence-number'") }
+        guard let v3 = f3 else { throw AcmeRuntimeError.protocolError("tsl-info: missing field 'issue-date'") }
+        guard let v4 = f4 else { throw AcmeRuntimeError.protocolError("tsl-info: missing field 'next-update'") }
+        guard let v5 = f5 else { throw AcmeRuntimeError.protocolError("tsl-info: missing field 'sha256'") }
+        guard let v6 = f6 else { throw AcmeRuntimeError.protocolError("tsl-info: missing field 'expired'") }
+        return TslInfo(id: v1, sequenceNumber: v2, issueDate: v3, nextUpdate: v4, sha256: v5, expired: v6)
+    }
+}
+
+extension CacheStats {
+    func encode(to w: MsgPackWriter) {
+        var n = 0
+        n += 1
+        n += 1
+        n += 1
+        w.writeMapHeader(n)
+        w.writeUInt(1); w.writeUInt(UInt64(self.ocspHits))
+        w.writeUInt(2); w.writeUInt(UInt64(self.ocspMisses))
+        w.writeUInt(3); w.writeUInt(UInt64(self.ocspEntries))
+    }
+
+    static func decode(from r: MsgPackReader) throws -> CacheStats {
+        let n = try r.readMapHeader()
+        var f1: UInt64? = nil
+        var f2: UInt64? = nil
+        var f3: UInt32? = nil
+        for _ in 0..<n {
+            switch try r.readUInt(UInt32.self) {
+            case 1: f1 = try r.readUInt(UInt64.self)
+            case 2: f2 = try r.readUInt(UInt64.self)
+            case 3: f3 = try r.readUInt(UInt32.self)
+            default: try r.skip()
+            }
+        }
+        guard let v1 = f1 else { throw AcmeRuntimeError.protocolError("cache-stats: missing field 'ocsp-hits'") }
+        guard let v2 = f2 else { throw AcmeRuntimeError.protocolError("cache-stats: missing field 'ocsp-misses'") }
+        guard let v3 = f3 else { throw AcmeRuntimeError.protocolError("cache-stats: missing field 'ocsp-entries'") }
+        return CacheStats(ocspHits: v1, ocspMisses: v2, ocspEntries: v3)
     }
 }
 

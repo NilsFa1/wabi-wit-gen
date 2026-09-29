@@ -99,6 +99,8 @@ public final class TestPki {
                     <TSLSequenceNumber>1</TSLSequenceNumber>
                     <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric</TSLType>
                     <SchemeOperatorName><Name xml:lang="DE">gematik PoC Test</Name></SchemeOperatorName>
+                    <ListIssueDateTime>2026-09-29T00:00:00Z</ListIssueDateTime>
+                    <NextUpdate><dateTime>2046-09-29T00:00:00Z</dateTime></NextUpdate>
                   </SchemeInformation>
                   <TrustServiceProviderList>
                     <TrustServiceProvider>

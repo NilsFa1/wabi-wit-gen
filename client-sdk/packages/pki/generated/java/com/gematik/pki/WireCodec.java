@@ -102,6 +102,8 @@ final class WireCodec {
             w.writeArrayHeader(2); w.writeUInt(1); WireCodec.writeVerificationFailure(w, c.value());
         } else if (v instanceof PkiError.InvalidInput c) {
             w.writeArrayHeader(2); w.writeUInt(2); w.writeString(c.value());
+        } else if (v instanceof PkiError.DownloadFailed c) {
+            w.writeArrayHeader(2); w.writeUInt(3); w.writeString(c.value());
         } else {
             throw new IllegalArgumentException("unknown PkiError case: " + v);
         }
@@ -116,8 +118,84 @@ final class WireCodec {
         if (false) { throw new AssertionError(); }
         else if (tag == 1 && n >= 2) { v = new PkiError.VerificationFailed(WireCodec.readVerificationFailure(r)); used = 2; }
         else if (tag == 2 && n >= 2) { v = new PkiError.InvalidInput(r.readString()); used = 2; }
+        else if (tag == 3 && n >= 2) { v = new PkiError.DownloadFailed(r.readString()); used = 2; }
         else throw new AcmeProtocolException("unknown case tag " + tag + " for 'pki-error'");
         for (int i = used; i < n; i++) r.skip();
         return v;
+    }
+
+    static void writeTslInfo(MsgPackWriter w, TslInfo v) {
+        int n = 0;
+        n++;
+        n++;
+        n++;
+        n++;
+        n++;
+        n++;
+        w.writeMapHeader(n);
+        w.writeUInt(1); w.writeString(v.id());
+        w.writeUInt(2); w.writeInt(v.sequenceNumber());
+        w.writeUInt(3); w.writeString(v.issueDate());
+        w.writeUInt(4); w.writeString(v.nextUpdate());
+        w.writeUInt(5); w.writeString(v.sha256());
+        w.writeUInt(6); w.writeBool(v.expired());
+    }
+
+    static TslInfo readTslInfo(MsgPackReader r) {
+        int n = r.readMapHeader();
+        String f1 = null; boolean has1 = false;
+        long f2 = 0; boolean has2 = false;
+        String f3 = null; boolean has3 = false;
+        String f4 = null; boolean has4 = false;
+        String f5 = null; boolean has5 = false;
+        boolean f6 = false; boolean has6 = false;
+        for (int i = 0; i < n; i++) {
+            switch ((int) r.readUIntMax(0xFFFFFFFFL)) {
+                case 1 -> { f1 = r.readString(); has1 = true; }
+                case 2 -> { f2 = r.readInt64(); has2 = true; }
+                case 3 -> { f3 = r.readString(); has3 = true; }
+                case 4 -> { f4 = r.readString(); has4 = true; }
+                case 5 -> { f5 = r.readString(); has5 = true; }
+                case 6 -> { f6 = r.readBool(); has6 = true; }
+                default -> r.skip();
+            }
+        }
+        if (!has1) throw new AcmeProtocolException("tsl-info: missing field 'id'");
+        if (!has2) throw new AcmeProtocolException("tsl-info: missing field 'sequence-number'");
+        if (!has3) throw new AcmeProtocolException("tsl-info: missing field 'issue-date'");
+        if (!has4) throw new AcmeProtocolException("tsl-info: missing field 'next-update'");
+        if (!has5) throw new AcmeProtocolException("tsl-info: missing field 'sha256'");
+        if (!has6) throw new AcmeProtocolException("tsl-info: missing field 'expired'");
+        return new TslInfo(f1, f2, f3, f4, f5, f6);
+    }
+
+    static void writeCacheStats(MsgPackWriter w, CacheStats v) {
+        int n = 0;
+        n++;
+        n++;
+        n++;
+        w.writeMapHeader(n);
+        w.writeUInt(1); w.writeUInt64(v.ocspHits());
+        w.writeUInt(2); w.writeUInt64(v.ocspMisses());
+        w.writeUInt(3); w.writeUInt(Integer.toUnsignedLong(v.ocspEntries()));
+    }
+
+    static CacheStats readCacheStats(MsgPackReader r) {
+        int n = r.readMapHeader();
+        long f1 = 0; boolean has1 = false;
+        long f2 = 0; boolean has2 = false;
+        int f3 = 0; boolean has3 = false;
+        for (int i = 0; i < n; i++) {
+            switch ((int) r.readUIntMax(0xFFFFFFFFL)) {
+                case 1 -> { f1 = r.readUInt64(); has1 = true; }
+                case 2 -> { f2 = r.readUInt64(); has2 = true; }
+                case 3 -> { f3 = (int) r.readUIntMax(0xFFFFFFFFL); has3 = true; }
+                default -> r.skip();
+            }
+        }
+        if (!has1) throw new AcmeProtocolException("cache-stats: missing field 'ocsp-hits'");
+        if (!has2) throw new AcmeProtocolException("cache-stats: missing field 'ocsp-misses'");
+        if (!has3) throw new AcmeProtocolException("cache-stats: missing field 'ocsp-entries'");
+        return new CacheStats(f1, f2, f3);
     }
 }

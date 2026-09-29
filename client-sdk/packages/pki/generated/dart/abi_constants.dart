@@ -17,6 +17,10 @@ abstract final class Contract {
 abstract final class MethodIds {
   static const certificateVerifierConstructor = 0x0100;
   static const certificateVerifierVerify = 0x0101;
+  static const certificateVerifierTslInfo = 0x0102;
+  static const certificateVerifierSetTsl = 0x0103;
+  static const certificateVerifierRefreshTsl = 0x0104;
+  static const certificateVerifierCacheStats = 0x0105;
 }
 
 /// ABI 1.1 status codes (abi/acme_abi.h).

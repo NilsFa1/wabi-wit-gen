@@ -54,6 +54,65 @@ public final class CertificateVerifier implements AutoCloseable {
         });
     }
 
+    /**
+     * The TSL in use (parsed on first use).
+     */
+    public TslInfo tslInfo() {
+        var w = new MsgPackWriter();
+        w.writeArrayHeader(0);
+        var r = new MsgPackReader(backend.callSync(handle.get(), MethodIds.CERTIFICATE_VERIFIER_TSL_INFO, w.toByteArray()));
+        if (r.readResultTag() != 0) {
+            throw new PkiException(WireCodec.readPkiError(r));
+        }
+        return WireCodec.readTslInfo(r);
+    }
+
+    /**
+     * Replaces the TSL, e.g. with a persisted last-good copy. A TSL that
+     * does not parse is rejected and the current one stays; verifications
+     * in flight finish with the TSL they started with.
+     */
+    public TslInfo setTsl(byte[] tsl) {
+        var w = new MsgPackWriter();
+        w.writeArrayHeader(1);
+        w.writeBinary(tsl);
+        var r = new MsgPackReader(backend.callSync(handle.get(), MethodIds.CERTIFICATE_VERIFIER_SET_TSL, w.toByteArray()));
+        if (r.readResultTag() != 0) {
+            throw new PkiException(WireCodec.readPkiError(r));
+        }
+        return WireCodec.readTslInfo(r);
+    }
+
+    /**
+     * Checks `<url with .xml replaced by .sha2>` and, only if the hash
+     * differs from the TSL in use, downloads `url`, checks it against that
+     * hash and switches to it. Returns the new TSL bytes (for the app to
+     * persist) or none if the TSL is unchanged.
+     */
+    public CompletableFuture<java.util.Optional<byte[]>> refreshTsl(String url) {
+        var w = new MsgPackWriter();
+        w.writeArrayHeader(1);
+        w.writeString(url);
+        return backend.callAsync(handle.get(), MethodIds.CERTIFICATE_VERIFIER_REFRESH_TSL, w.toByteArray(), bytes -> {
+            var r = new MsgPackReader(bytes);
+            if (r.readResultTag() != 0) {
+                throw new PkiException(WireCodec.readPkiError(r));
+            }
+            return r.readOptional(r1 -> r1.readBinary());
+        });
+    }
+
+    /**
+     * OCSP cache statistics (responses are cached per certificate until
+     * their nextUpdate, at most a few minutes).
+     */
+    public CacheStats cacheStats() {
+        var w = new MsgPackWriter();
+        w.writeArrayHeader(0);
+        var r = new MsgPackReader(backend.callSync(handle.get(), MethodIds.CERTIFICATE_VERIFIER_CACHE_STATS, w.toByteArray()));
+        return WireCodec.readCacheStats(r);
+    }
+
     /** Releases the native object. In-flight calls fail, event publishers complete. Idempotent. */
     @Override
     public void close() {

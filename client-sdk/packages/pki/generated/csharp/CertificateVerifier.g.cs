@@ -55,6 +55,64 @@ public sealed partial class CertificateVerifier : IDisposable, IAsyncDisposable
         return WireCodec.ReadAdmission(r);
     }
 
+    /// <summary>
+    /// The TSL in use (parsed on first use).
+    /// </summary>
+    public TslInfo TslInfo()
+    {
+        var w = new MsgPackWriter();
+        w.WriteArrayHeader(0);
+        var r = new MsgPackReader(_backend.CallSync(_handle.Value, MethodIds.CertificateVerifierTslInfo, w.ToArray()));
+        if (r.ReadResultTag() != 0)
+            throw new PkiException(WireCodec.ReadPkiError(r));
+        return WireCodec.ReadTslInfo(r);
+    }
+
+    /// <summary>
+    /// Replaces the TSL, e.g. with a persisted last-good copy. A TSL that
+    /// does not parse is rejected and the current one stays; verifications
+    /// in flight finish with the TSL they started with.
+    /// </summary>
+    public TslInfo SetTsl(byte[] tsl)
+    {
+        var w = new MsgPackWriter();
+        w.WriteArrayHeader(1);
+        w.WriteBinary(tsl);
+        var r = new MsgPackReader(_backend.CallSync(_handle.Value, MethodIds.CertificateVerifierSetTsl, w.ToArray()));
+        if (r.ReadResultTag() != 0)
+            throw new PkiException(WireCodec.ReadPkiError(r));
+        return WireCodec.ReadTslInfo(r);
+    }
+
+    /// <summary>
+    /// Checks `&lt;url with .xml replaced by .sha2&gt;` and, only if the hash
+    /// differs from the TSL in use, downloads `url`, checks it against that
+    /// hash and switches to it. Returns the new TSL bytes (for the app to
+    /// persist) or none if the TSL is unchanged.
+    /// </summary>
+    public async Task<byte[]?> RefreshTslAsync(string url, CancellationToken cancellationToken = default)
+    {
+        var w = new MsgPackWriter();
+        w.WriteArrayHeader(1);
+        w.WriteString(url);
+        var r = new MsgPackReader(await _backend.CallAsync(_handle.Value, MethodIds.CertificateVerifierRefreshTsl, w.ToArray(), cancellationToken).ConfigureAwait(false));
+        if (r.ReadResultTag() != 0)
+            throw new PkiException(WireCodec.ReadPkiError(r));
+        return (r.TryReadNil() ? default(byte[]?) : r.ReadBinary());
+    }
+
+    /// <summary>
+    /// OCSP cache statistics (responses are cached per certificate until
+    /// their nextUpdate, at most a few minutes).
+    /// </summary>
+    public CacheStats CacheStats()
+    {
+        var w = new MsgPackWriter();
+        w.WriteArrayHeader(0);
+        var r = new MsgPackReader(_backend.CallSync(_handle.Value, MethodIds.CertificateVerifierCacheStats, w.ToArray()));
+        return WireCodec.ReadCacheStats(r);
+    }
+
     /// <summary>Releases the native object. In-flight calls fail, event streams end.</summary>
     public void Dispose() => _handle.Dispose();
 

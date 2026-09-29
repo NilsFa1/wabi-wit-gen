@@ -127,6 +127,10 @@ abstract final class WireCodec {
         w.writeArrayHeader(2);
         w.writeUint(2);
         w.writeString(value);
+      case PkiErrorDownloadFailed(:final value):
+        w.writeArrayHeader(2);
+        w.writeUint(3);
+        w.writeString(value);
     }
   }
 
@@ -143,6 +147,9 @@ abstract final class WireCodec {
       case 2 when n >= 2:
         v = PkiErrorInvalidInput(r.readString());
         used = 2;
+      case 3 when n >= 2:
+        v = PkiErrorDownloadFailed(r.readString());
+        used = 2;
       default:
         throw AcmeProtocolException("unknown case tag $tag for 'pki-error'");
     }
@@ -150,6 +157,110 @@ abstract final class WireCodec {
       r.skip();
     }
     return v;
+  }
+
+  static void writeTslInfo(MsgPackWriter w, TslInfo v) {
+    var n = 0;
+    n++;
+    n++;
+    n++;
+    n++;
+    n++;
+    n++;
+    w.writeMapHeader(n);
+    w.writeUint(1); w.writeString(v.id);
+    w.writeUint(2); w.writeInt(v.sequenceNumber);
+    w.writeUint(3); w.writeString(v.issueDate);
+    w.writeUint(4); w.writeString(v.nextUpdate);
+    w.writeUint(5); w.writeString(v.sha256);
+    w.writeUint(6); w.writeBool(v.expired);
+  }
+
+  static TslInfo readTslInfo(MsgPackReader r) {
+    final n = r.readMapHeader();
+    String? f1;
+    var has1 = false;
+    int? f2;
+    var has2 = false;
+    String? f3;
+    var has3 = false;
+    String? f4;
+    var has4 = false;
+    String? f5;
+    var has5 = false;
+    bool? f6;
+    var has6 = false;
+    for (var i = 0; i < n; i++) {
+      switch (r.readUint()) {
+        case 1:
+          f1 = r.readString();
+          has1 = true;
+        case 2:
+          f2 = r.readInt();
+          has2 = true;
+        case 3:
+          f3 = r.readString();
+          has3 = true;
+        case 4:
+          f4 = r.readString();
+          has4 = true;
+        case 5:
+          f5 = r.readString();
+          has5 = true;
+        case 6:
+          f6 = r.readBool();
+          has6 = true;
+        default:
+          r.skip();
+      }
+    }
+    if (!has1) throw AcmeProtocolException("tsl-info: missing field 'id'");
+    if (!has2) throw AcmeProtocolException("tsl-info: missing field 'sequence-number'");
+    if (!has3) throw AcmeProtocolException("tsl-info: missing field 'issue-date'");
+    if (!has4) throw AcmeProtocolException("tsl-info: missing field 'next-update'");
+    if (!has5) throw AcmeProtocolException("tsl-info: missing field 'sha256'");
+    if (!has6) throw AcmeProtocolException("tsl-info: missing field 'expired'");
+    return TslInfo(id: f1 as String, sequenceNumber: f2 as int, issueDate: f3 as String, nextUpdate: f4 as String, sha256: f5 as String, expired: f6 as bool);
+  }
+
+  static void writeCacheStats(MsgPackWriter w, CacheStats v) {
+    var n = 0;
+    n++;
+    n++;
+    n++;
+    w.writeMapHeader(n);
+    w.writeUint(1); w.writeUint(v.ocspHits);
+    w.writeUint(2); w.writeUint(v.ocspMisses);
+    w.writeUint(3); w.writeUint(v.ocspEntries);
+  }
+
+  static CacheStats readCacheStats(MsgPackReader r) {
+    final n = r.readMapHeader();
+    int? f1;
+    var has1 = false;
+    int? f2;
+    var has2 = false;
+    int? f3;
+    var has3 = false;
+    for (var i = 0; i < n; i++) {
+      switch (r.readUint()) {
+        case 1:
+          f1 = r.readUint();
+          has1 = true;
+        case 2:
+          f2 = r.readUint();
+          has2 = true;
+        case 3:
+          f3 = r.readUintMax(0xffffffff);
+          has3 = true;
+        default:
+          r.skip();
+      }
+    }
+    if (!has1) throw AcmeProtocolException("cache-stats: missing field 'ocsp-hits'");
+    if (!has2) throw AcmeProtocolException("cache-stats: missing field 'ocsp-misses'");
+    if (!has3) throw AcmeProtocolException("cache-stats: missing field 'ocsp-entries'");
+    return CacheStats(ocspHits: f1 as int, ocspMisses: f2 as int, ocspEntries: f3 as int);
   }
 
 }

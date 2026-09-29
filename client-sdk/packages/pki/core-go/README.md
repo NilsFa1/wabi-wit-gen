@@ -31,9 +31,31 @@ gemLibPki 5.0.2 step by step — same order, same error codes, same texts:
 gempki on its own follows the TI 2.0 model (trust from the gematik roots, TSL
 only for SubCAs and responders); this core does not use that path.
 
-Not yet: TSL signature verification (TUC_PKI_001), TSL download/update and
-NextUpdate, an OCSP response cache, OCSP nonce. RSA profiles return
-`UNSUPPORTED_RSA_PROFILE`.
+## TSL management and OCSP cache
+
+* **TSL snapshots** (`tsl_store.go`): the TSL in use is an immutable snapshot
+  (bytes, hash, parsed CAs and responders), swapped atomically by `set-tsl` and
+  `refresh-tsl`; verifications in flight keep the snapshot they started with.
+  Identical TSL bytes are parsed once and shared between verifiers.
+* **`refresh-tsl(url)`**: fetches `TSL.sha2` next to `TSL.xml`; only if it
+  differs from the TSL in use is the XML downloaded, checked against the
+  announced hash, parsed and switched to. The new bytes go back to the app to
+  persist (and to hand to `set-tsl` on the next start). A failed refresh keeps
+  the current TSL.
+* **`tsl-info`**: id, sequence number, issue date, NextUpdate, SHA-256 and
+  whether NextUpdate has passed.
+* **OCSP cache** (`ocsp_cache.go`): keyed by CertID (issuer name and key hash
+  plus serial — gemLibPki's `OcspRespCache` keys by serial only); only verified
+  outcomes (good, revoked) are kept, until the response's nextUpdate and at most
+  5 minutes; concurrent checks of one certificate share one request; LRU-bounded
+  (10 000 entries). `cache-stats` reports hits, misses and entries.
+
+Tested in `manager_test.go` against a test PKI over HTTP (CA, OCSP responder
+listed in the TSL, certHash, `.sha2`).
+
+Not yet: TSL signature verification (TUC_PKI_001, XAdES), TSL sequence number
+monotonicity, NextUpdate enforcement (reported only), OCSP nonce, HTTP through
+host calls of the app. RSA profiles return `UNSUPPORTED_RSA_PROFILE`.
 
 ## Build
 

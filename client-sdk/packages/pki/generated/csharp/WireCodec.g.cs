@@ -113,6 +113,7 @@ internal static class WireCodec
         {
             case PkiError.VerificationFailed c: w.WriteArrayHeader(2); w.WriteUInt(1); WireCodec.WriteVerificationFailure(w, c.Value); break;
             case PkiError.InvalidInput c: w.WriteArrayHeader(2); w.WriteUInt(2); w.WriteString(c.Value); break;
+            case PkiError.DownloadFailed c: w.WriteArrayHeader(2); w.WriteUInt(3); w.WriteString(c.Value); break;
             default: throw new ArgumentException("unknown PkiError case", nameof(v));
         }
     }
@@ -127,10 +128,94 @@ internal static class WireCodec
         {
             case 1 when n >= 2: v = new PkiError.VerificationFailed(WireCodec.ReadVerificationFailure(r)); used = 2; break;
             case 2 when n >= 2: v = new PkiError.InvalidInput(r.ReadString()); used = 2; break;
+            case 3 when n >= 2: v = new PkiError.DownloadFailed(r.ReadString()); used = 2; break;
             default: throw new AcmeProtocolException($"unknown case tag {tag} for 'pki-error'");
         }
         for (int i = used; i < n; i++) r.Skip();
         return v;
+    }
+
+    public static void WriteTslInfo(MsgPackWriter w, TslInfo v)
+    {
+        int n = 0;
+        n++;
+        n++;
+        n++;
+        n++;
+        n++;
+        n++;
+        w.WriteMapHeader(n);
+        w.WriteUInt(1); w.WriteString(v.Id);
+        w.WriteUInt(2); w.WriteInt(v.SequenceNumber);
+        w.WriteUInt(3); w.WriteString(v.IssueDate);
+        w.WriteUInt(4); w.WriteString(v.NextUpdate);
+        w.WriteUInt(5); w.WriteString(v.Sha256);
+        w.WriteUInt(6); w.WriteBool(v.Expired);
+    }
+
+    public static TslInfo ReadTslInfo(MsgPackReader r)
+    {
+        int n = r.ReadMapHeader();
+        string f1 = default!; bool has1 = false;
+        long f2 = default!; bool has2 = false;
+        string f3 = default!; bool has3 = false;
+        string f4 = default!; bool has4 = false;
+        string f5 = default!; bool has5 = false;
+        bool f6 = default!; bool has6 = false;
+        for (int i = 0; i < n; i++)
+        {
+            switch (r.ReadUInt64())
+            {
+                case 1: f1 = r.ReadString(); has1 = true; break;
+                case 2: f2 = r.ReadInt64(); has2 = true; break;
+                case 3: f3 = r.ReadString(); has3 = true; break;
+                case 4: f4 = r.ReadString(); has4 = true; break;
+                case 5: f5 = r.ReadString(); has5 = true; break;
+                case 6: f6 = r.ReadBool(); has6 = true; break;
+                default: r.Skip(); break;
+            }
+        }
+        if (!has1) throw new AcmeProtocolException("tsl-info: missing field 'id'");
+        if (!has2) throw new AcmeProtocolException("tsl-info: missing field 'sequence-number'");
+        if (!has3) throw new AcmeProtocolException("tsl-info: missing field 'issue-date'");
+        if (!has4) throw new AcmeProtocolException("tsl-info: missing field 'next-update'");
+        if (!has5) throw new AcmeProtocolException("tsl-info: missing field 'sha256'");
+        if (!has6) throw new AcmeProtocolException("tsl-info: missing field 'expired'");
+        return new TslInfo(f1, f2, f3, f4, f5, f6);
+    }
+
+    public static void WriteCacheStats(MsgPackWriter w, CacheStats v)
+    {
+        int n = 0;
+        n++;
+        n++;
+        n++;
+        w.WriteMapHeader(n);
+        w.WriteUInt(1); w.WriteUInt(v.OcspHits);
+        w.WriteUInt(2); w.WriteUInt(v.OcspMisses);
+        w.WriteUInt(3); w.WriteUInt(v.OcspEntries);
+    }
+
+    public static CacheStats ReadCacheStats(MsgPackReader r)
+    {
+        int n = r.ReadMapHeader();
+        ulong f1 = default!; bool has1 = false;
+        ulong f2 = default!; bool has2 = false;
+        uint f3 = default!; bool has3 = false;
+        for (int i = 0; i < n; i++)
+        {
+            switch (r.ReadUInt64())
+            {
+                case 1: f1 = r.ReadUInt64(); has1 = true; break;
+                case 2: f2 = r.ReadUInt64(); has2 = true; break;
+                case 3: f3 = checked((uint)r.ReadUInt64()); has3 = true; break;
+                default: r.Skip(); break;
+            }
+        }
+        if (!has1) throw new AcmeProtocolException("cache-stats: missing field 'ocsp-hits'");
+        if (!has2) throw new AcmeProtocolException("cache-stats: missing field 'ocsp-misses'");
+        if (!has3) throw new AcmeProtocolException("cache-stats: missing field 'ocsp-entries'");
+        return new CacheStats(f1, f2, f3);
     }
 
 }

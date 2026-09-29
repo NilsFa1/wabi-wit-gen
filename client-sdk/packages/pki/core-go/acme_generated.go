@@ -35,6 +35,10 @@ const (
 	groupCertificateVerifier             uint32 = 0x01
 	methodCertificateVerifierConstructor uint32 = 0x0100
 	methodCertificateVerifierVerify      uint32 = 0x0101
+	methodCertificateVerifierTslInfo     uint32 = 0x0102
+	methodCertificateVerifierSetTsl      uint32 = 0x0103
+	methodCertificateVerifierRefreshTsl  uint32 = 0x0104
+	methodCertificateVerifierCacheStats  uint32 = 0x0105
 )
 
 // Certificate profiles of gemSpec_PKI as supported by gemLibPki.
@@ -193,6 +197,8 @@ const (
 	PkiErrorVerificationFailed PkiErrorTag = 1
 	// Malformed certificate, TSL or arguments.
 	PkiErrorInvalidInput PkiErrorTag = 2
+	// A TSL could not be downloaded (network, HTTP status, hash mismatch).
+	PkiErrorDownloadFailed PkiErrorTag = 3
 )
 
 func (t PkiErrorTag) String() string {
@@ -201,6 +207,8 @@ func (t PkiErrorTag) String() string {
 		return "verification-failed"
 	case PkiErrorInvalidInput:
 		return "invalid-input"
+	case PkiErrorDownloadFailed:
+		return "download-failed"
 	}
 	return fmt.Sprintf("pki-error(%d)", uint32(t))
 }
@@ -210,6 +218,7 @@ type PkiError struct {
 	Tag                PkiErrorTag
 	VerificationFailed VerificationFailure
 	InvalidInput       string
+	DownloadFailed     string
 }
 
 func encodePkiError(w *acmeabi.Writer, v PkiError) {
@@ -222,6 +231,10 @@ func encodePkiError(w *acmeabi.Writer, v PkiError) {
 		w.Array(2)
 		w.Uint(2)
 		w.Str(v.InvalidInput)
+	case PkiErrorDownloadFailed:
+		w.Array(2)
+		w.Uint(3)
+		w.Str(v.DownloadFailed)
 	default:
 		w.Array(1)
 		w.Uint(uint64(v.Tag))
@@ -243,6 +256,9 @@ func decodePkiError(r *acmeabi.Reader) (v PkiError) {
 	case v.Tag == PkiErrorInvalidInput && n >= 2:
 		v.InvalidInput = r.Str()
 		used = 2
+	case v.Tag == PkiErrorDownloadFailed && n >= 2:
+		v.DownloadFailed = r.Str()
+		used = 2
 	default:
 		r.Fail("pki-error: unknown case %d", uint32(v.Tag))
 	}
@@ -253,6 +269,140 @@ func decodePkiError(r *acmeabi.Reader) (v PkiError) {
 }
 
 func (e *PkiError) Error() string { return fmt.Sprintf("pki-error: %+v", *e) }
+
+// The TSL a verifier currently uses.
+type TslInfo struct {
+	// `Id` attribute of the TrustServiceStatusList.
+	Id             string
+	SequenceNumber int64
+	// ListIssueDateTime and NextUpdate, RFC 3339 (empty if absent).
+	IssueDate  string
+	NextUpdate string
+	// Hex SHA-256 of the TSL bytes, as published in the `.sha2` file next to it.
+	Sha256 string
+	// NextUpdate has passed: the TSL should be refreshed.
+	Expired bool
+}
+
+func encodeTslInfo(w *acmeabi.Writer, v TslInfo) {
+	n := 6
+	w.Map(n)
+	w.Uint(1)
+	w.Str(v.Id)
+	w.Uint(2)
+	w.Int(int64(v.SequenceNumber))
+	w.Uint(3)
+	w.Str(v.IssueDate)
+	w.Uint(4)
+	w.Str(v.NextUpdate)
+	w.Uint(5)
+	w.Str(v.Sha256)
+	w.Uint(6)
+	w.Bool(v.Expired)
+}
+
+func decodeTslInfo(r *acmeabi.Reader) (v TslInfo) {
+	n := r.Map()
+	hasId := false
+	hasSequenceNumber := false
+	hasIssueDate := false
+	hasNextUpdate := false
+	hasSha256 := false
+	hasExpired := false
+	for i := 0; r.Err == nil && i < n; i++ {
+		switch r.Uint(math.MaxUint32) {
+		case 1:
+			v.Id = r.Str()
+			hasId = true
+		case 2:
+			v.SequenceNumber = r.Int(math.MinInt64, math.MaxInt64)
+			hasSequenceNumber = true
+		case 3:
+			v.IssueDate = r.Str()
+			hasIssueDate = true
+		case 4:
+			v.NextUpdate = r.Str()
+			hasNextUpdate = true
+		case 5:
+			v.Sha256 = r.Str()
+			hasSha256 = true
+		case 6:
+			v.Expired = r.Bool()
+			hasExpired = true
+		default:
+			r.Skip() // field of a newer peer
+		}
+	}
+	if !hasId {
+		r.Missing("tsl-info.id")
+	}
+	if !hasSequenceNumber {
+		r.Missing("tsl-info.sequence-number")
+	}
+	if !hasIssueDate {
+		r.Missing("tsl-info.issue-date")
+	}
+	if !hasNextUpdate {
+		r.Missing("tsl-info.next-update")
+	}
+	if !hasSha256 {
+		r.Missing("tsl-info.sha256")
+	}
+	if !hasExpired {
+		r.Missing("tsl-info.expired")
+	}
+	return
+}
+
+// OCSP response cache of a verifier.
+type CacheStats struct {
+	OcspHits    uint64
+	OcspMisses  uint64
+	OcspEntries uint32
+}
+
+func encodeCacheStats(w *acmeabi.Writer, v CacheStats) {
+	n := 3
+	w.Map(n)
+	w.Uint(1)
+	w.Uint(uint64(v.OcspHits))
+	w.Uint(2)
+	w.Uint(uint64(v.OcspMisses))
+	w.Uint(3)
+	w.Uint(uint64(v.OcspEntries))
+}
+
+func decodeCacheStats(r *acmeabi.Reader) (v CacheStats) {
+	n := r.Map()
+	hasOcspHits := false
+	hasOcspMisses := false
+	hasOcspEntries := false
+	for i := 0; r.Err == nil && i < n; i++ {
+		switch r.Uint(math.MaxUint32) {
+		case 1:
+			v.OcspHits = r.Uint(math.MaxUint64)
+			hasOcspHits = true
+		case 2:
+			v.OcspMisses = r.Uint(math.MaxUint64)
+			hasOcspMisses = true
+		case 3:
+			v.OcspEntries = uint32(r.Uint(math.MaxUint32))
+			hasOcspEntries = true
+		default:
+			r.Skip() // field of a newer peer
+		}
+	}
+	if !hasOcspHits {
+		r.Missing("cache-stats.ocsp-hits")
+	}
+	if !hasOcspMisses {
+		r.Missing("cache-stats.ocsp-misses")
+	}
+	if !hasOcspEntries {
+		r.Missing("cache-stats.ocsp-entries")
+	}
+	return
+}
 
 // TUC_PKI_018 certificate verification against the trust anchors of a TSL.
 //
@@ -265,6 +415,20 @@ type CertificateVerifier interface {
 	// (the first matching profile wins). OCSP is only queried if
 	// `with-ocsp` is set (needs network access to the TSL's responder).
 	Verify(ctx context.Context, certificate []byte, profiles []CertificateProfile, withOcsp bool) (Admission, *PkiError)
+	// The TSL in use (parsed on first use).
+	TslInfo() (TslInfo, *PkiError)
+	// Replaces the TSL, e.g. with a persisted last-good copy. A TSL that
+	// does not parse is rejected and the current one stays; verifications
+	// in flight finish with the TSL they started with.
+	SetTsl(tsl []byte) (TslInfo, *PkiError)
+	// Checks `<url with .xml replaced by .sha2>` and, only if the hash
+	// differs from the TSL in use, downloads `url`, checks it against that
+	// hash and switches to it. Returns the new TSL bytes (for the app to
+	// persist) or none if the TSL is unchanged.
+	RefreshTsl(ctx context.Context, url string) (*[]byte, *PkiError)
+	// OCSP cache statistics (responses are cached per certificate until
+	// their nextUpdate, at most a few minutes).
+	CacheStats() CacheStats
 	Close()
 }
 
@@ -287,7 +451,61 @@ func (dispatcher) DispatchSync(object uint64, method uint32, req []byte) ([]byte
 			return []byte(r.Err.Error()), acmeabi.ErrInvalidArgument
 		}
 		w.Uint(acmeabi.NewObject(groupCertificateVerifier, newCertificateVerifier(productType, tsl)))
-	case methodCertificateVerifierVerify:
+	case methodCertificateVerifierTslInfo:
+		this, ok := acmeabi.Object[CertificateVerifier](object)
+		if !ok {
+			return nil, acmeabi.ErrInvalidHandle
+		}
+		r := acmeabi.NewReader(req)
+		r.Params(0)
+		r.Finish()
+		if r.Err != nil {
+			return []byte(r.Err.Error()), acmeabi.ErrInvalidArgument
+		}
+		ret, e := this.TslInfo()
+		w.Array(2)
+		if e != nil {
+			w.Uint(1)
+			encodePkiError(w, *e)
+		} else {
+			w.Uint(0)
+			encodeTslInfo(w, ret)
+		}
+	case methodCertificateVerifierSetTsl:
+		this, ok := acmeabi.Object[CertificateVerifier](object)
+		if !ok {
+			return nil, acmeabi.ErrInvalidHandle
+		}
+		r := acmeabi.NewReader(req)
+		r.Params(1)
+		tsl := r.Bin()
+		r.Finish()
+		if r.Err != nil {
+			return []byte(r.Err.Error()), acmeabi.ErrInvalidArgument
+		}
+		ret, e := this.SetTsl(tsl)
+		w.Array(2)
+		if e != nil {
+			w.Uint(1)
+			encodePkiError(w, *e)
+		} else {
+			w.Uint(0)
+			encodeTslInfo(w, ret)
+		}
+	case methodCertificateVerifierCacheStats:
+		this, ok := acmeabi.Object[CertificateVerifier](object)
+		if !ok {
+			return nil, acmeabi.ErrInvalidHandle
+		}
+		r := acmeabi.NewReader(req)
+		r.Params(0)
+		r.Finish()
+		if r.Err != nil {
+			return []byte(r.Err.Error()), acmeabi.ErrInvalidArgument
+		}
+		ret := this.CacheStats()
+		encodeCacheStats(w, ret)
+	case methodCertificateVerifierVerify, methodCertificateVerifierRefreshTsl:
 		return nil, acmeabi.ErrUnsupported
 	default:
 		return nil, acmeabi.ErrUnknownMethod
@@ -324,7 +542,36 @@ func (dispatcher) DispatchAsync(object uint64, method uint32, req []byte) (func(
 			}
 			return w.B
 		}, acmeabi.OK
-	case methodCertificateVerifierConstructor:
+	case methodCertificateVerifierRefreshTsl:
+		this, ok := acmeabi.Object[CertificateVerifier](object)
+		if !ok {
+			return nil, acmeabi.ErrInvalidHandle
+		}
+		r := acmeabi.NewReader(req)
+		r.Params(1)
+		url := r.Str()
+		r.Finish()
+		if r.Err != nil {
+			return nil, acmeabi.ErrInvalidArgument
+		}
+		return func(ctx context.Context) []byte {
+			w := &acmeabi.Writer{}
+			ret, e := this.RefreshTsl(ctx, url)
+			w.Array(2)
+			if e != nil {
+				w.Uint(1)
+				encodePkiError(w, *e)
+			} else {
+				w.Uint(0)
+				if x1 := ret; x1 != nil {
+					w.Bin(*x1)
+				} else {
+					w.Nil()
+				}
+			}
+			return w.B
+		}, acmeabi.OK
+	case methodCertificateVerifierConstructor, methodCertificateVerifierTslInfo, methodCertificateVerifierSetTsl, methodCertificateVerifierCacheStats:
 		return nil, acmeabi.ErrUnsupported
 	}
 	return nil, acmeabi.ErrUnknownMethod

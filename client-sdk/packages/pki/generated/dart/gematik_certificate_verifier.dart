@@ -42,6 +42,51 @@ final class CertificateVerifier {
     return WireCodec.readAdmission(r);
   }
 
+  /// The TSL in use (parsed on first use).
+  TslInfo tslInfo() {
+    final w = MsgPackWriter()..writeArrayHeader(0);
+    final r = MsgPackReader(_backend.callSync(_handle.value, MethodIds.certificateVerifierTslInfo, w.takeBytes()));
+    if (r.readResultTag() != 0) {
+      throw WireCodec.readPkiError(r);
+    }
+    return WireCodec.readTslInfo(r);
+  }
+
+  /// Replaces the TSL, e.g. with a persisted last-good copy. A TSL that
+  /// does not parse is rejected and the current one stays; verifications
+  /// in flight finish with the TSL they started with.
+  TslInfo setTsl(Uint8List tsl) {
+    final w = MsgPackWriter()..writeArrayHeader(1);
+    w.writeBinary(tsl);
+    final r = MsgPackReader(_backend.callSync(_handle.value, MethodIds.certificateVerifierSetTsl, w.takeBytes()));
+    if (r.readResultTag() != 0) {
+      throw WireCodec.readPkiError(r);
+    }
+    return WireCodec.readTslInfo(r);
+  }
+
+  /// Checks `<url with .xml replaced by .sha2>` and, only if the hash
+  /// differs from the TSL in use, downloads `url`, checks it against that
+  /// hash and switches to it. Returns the new TSL bytes (for the app to
+  /// persist) or none if the TSL is unchanged.
+  Future<Uint8List?> refreshTsl(String url, {CancellationToken? cancellationToken}) async {
+    final w = MsgPackWriter()..writeArrayHeader(1);
+    w.writeString(url);
+    final r = MsgPackReader(await _backend.callAsync(_handle.value, MethodIds.certificateVerifierRefreshTsl, w.takeBytes(), cancellationToken: cancellationToken));
+    if (r.readResultTag() != 0) {
+      throw WireCodec.readPkiError(r);
+    }
+    return r.readOptional((r1) => r1.readBinary());
+  }
+
+  /// OCSP cache statistics (responses are cached per certificate until
+  /// their nextUpdate, at most a few minutes).
+  CacheStats cacheStats() {
+    final w = MsgPackWriter()..writeArrayHeader(0);
+    final r = MsgPackReader(_backend.callSync(_handle.value, MethodIds.certificateVerifierCacheStats, w.takeBytes()));
+    return WireCodec.readCacheStats(r);
+  }
+
   /// Releases the native object now (otherwise when garbage collected).
   /// In-flight calls fail, event streams end. Idempotent.
   void close() => _handle.close();

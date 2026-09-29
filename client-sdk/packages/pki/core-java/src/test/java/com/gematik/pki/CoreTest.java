@@ -2,7 +2,10 @@
 // generated dispatcher at the byte level (what the native library runs).
 package com.gematik.pki;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -10,6 +13,7 @@ import acme.core.runtime.AbiException;
 import acme.core.runtime.Status;
 import com.acme.client.runtime.MsgPackReader;
 import com.acme.client.runtime.MsgPackWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -85,6 +89,81 @@ class CoreTest {
         var e = assertThrows(ExecutionException.class,
                 () -> broken.verify(pki.valid, List.of(CertificateProfile.C_HCI_AUT_ECC), false).toCompletableFuture().get());
         assertInstanceOf(PkiError.InvalidInput.class, assertInstanceOf(PkiException.class, e.getCause()).error());
+    }
+
+    @Test
+    void tslInfo() {
+        var info = verifier().tslInfo();
+        assertEquals("TSL-PoC", info.id());
+        assertEquals(1, info.sequenceNumber());
+        assertEquals("2026-09-29T00:00:00Z", info.issueDate());
+        assertEquals("2046-09-29T00:00:00Z", info.nextUpdate());
+        assertEquals(64, info.sha256().length());
+        assertFalse(info.expired());
+    }
+
+    @Test
+    void setTslSwapsAndRejectsGarbage() throws Exception {
+        var v = verifier();
+        var other = new TestPki(); // same names, different CA key
+        v.setTsl(other.tsl);
+        assertInstanceOf(PkiError.VerificationFailed.class, error(v, pki.valid));
+        v.verify(other.valid, List.of(CertificateProfile.C_HCI_AUT_ECC), false).toCompletableFuture().get();
+        var before = v.tslInfo();
+        var e = assertThrows(PkiException.class, () -> v.setTsl("not xml".getBytes()));
+        assertInstanceOf(PkiError.InvalidInput.class, e.error());
+        assertEquals(before, v.tslInfo());
+    }
+
+    @Test
+    void refreshTsl() throws Exception {
+        var served = new java.util.concurrent.atomic.AtomicReference<>(pki.tsl);
+        var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/tsl.xml", x -> reply(x, served.get()));
+        server.createContext("/tsl.sha2", x -> reply(x, java.util.HexFormat.of().formatHex(
+                sha256(served.get())).getBytes(StandardCharsets.US_ASCII)));
+        server.start();
+        try {
+            var url = "http://127.0.0.1:" + server.getAddress().getPort() + "/tsl.xml";
+            var v = verifier();
+            assertTrue(v.refreshTsl(url).toCompletableFuture().get().isEmpty(), "unchanged");
+            var other = new TestPki();
+            served.set(other.tsl);
+            var got = v.refreshTsl(url).toCompletableFuture().get();
+            assertArrayEquals(other.tsl, got.orElseThrow());
+            v.verify(other.valid, List.of(CertificateProfile.C_HCI_AUT_ECC), false).toCompletableFuture().get();
+            var bad = assertThrows(ExecutionException.class,
+                    () -> v.refreshTsl(url.replace(".xml", ".txt")).toCompletableFuture().get());
+            assertInstanceOf(PkiError.DownloadFailed.class, assertInstanceOf(PkiException.class, bad.getCause()).error());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void cacheStatsWithoutOcsp() {
+        assertEquals(new CacheStats(0, 0, 0), verifier().cacheStats());
+    }
+
+    static byte[] sha256(byte[] b) {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256").digest(b);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    static void reply(com.sun.net.httpserver.HttpExchange x, byte[] body) throws java.io.IOException {
+        x.sendResponseHeaders(200, body.length);
+        try (var out = x.getResponseBody()) {
+            out.write(body);
+        }
+    }
+
+    static PkiError error(CertificateVerifierResource v, byte[] cert) {
+        var e = assertThrows(ExecutionException.class,
+                () -> v.verify(cert, List.of(CertificateProfile.C_HCI_AUT_ECC), false).toCompletableFuture().get());
+        return assertInstanceOf(PkiException.class, e.getCause()).error();
     }
 
     /** The generated dispatcher, byte for byte as the native entry points call it. */

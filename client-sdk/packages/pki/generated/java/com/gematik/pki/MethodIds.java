@@ -6,4 +6,8 @@ final class MethodIds {
     private MethodIds() {}
     static final int CERTIFICATE_VERIFIER_CONSTRUCTOR = 0x0100;
     static final int CERTIFICATE_VERIFIER_VERIFY = 0x0101;
+    static final int CERTIFICATE_VERIFIER_TSL_INFO = 0x0102;
+    static final int CERTIFICATE_VERIFIER_SET_TSL = 0x0103;
+    static final int CERTIFICATE_VERIFIER_REFRESH_TSL = 0x0104;
+    static final int CERTIFICATE_VERIFIER_CACHE_STATS = 0x0105;
 }

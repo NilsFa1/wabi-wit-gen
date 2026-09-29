@@ -50,6 +50,11 @@ public abstract record PkiError
     /// Malformed certificate, TSL or arguments.
     /// </summary>
     public sealed record InvalidInput(string Value) : PkiError;
+
+    /// <summary>
+    /// A TSL could not be downloaded (network, HTTP status, hash mismatch).
+    /// </summary>
+    public sealed record DownloadFailed(string Value) : PkiError;
 }
 
 /// <summary>Thrown when an operation fails with a <see cref="PkiError"/>.</summary>
@@ -58,4 +63,14 @@ public sealed class PkiException : AcmeException
     public PkiError Error { get; }
     public PkiException(PkiError error) : base(error.ToString()) => Error = error;
 }
+
+/// <summary>
+/// The TSL a verifier currently uses.
+/// </summary>
+public sealed record TslInfo(string Id, long SequenceNumber, string IssueDate, string NextUpdate, string Sha256, bool Expired);
+
+/// <summary>
+/// OCSP response cache of a verifier.
+/// </summary>
+public sealed record CacheStats(ulong OcspHits, ulong OcspMisses, uint OcspEntries);
 

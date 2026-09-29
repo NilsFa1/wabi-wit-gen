@@ -34,6 +34,22 @@ final class GematikPkiTests: XCTestCase {
         XCTAssertEqual(a.professionItems, ["Betriebsstätte Arzt"])
     }
 
+    func testTslInfoSwapAndCacheStats() throws {
+        let v = try verifier()
+        let info = try v.tslInfo()
+        XCTAssertEqual(info.id, "TSL-PoC")
+        XCTAssertEqual(info.sequenceNumber, 1)
+        XCTAssertEqual(info.nextUpdate, "2046-09-29T00:00:00Z")
+        XCTAssertEqual(info.sha256.count, 64)
+        XCTAssertFalse(info.expired)
+        XCTAssertThrowsError(try v.setTsl(tsl: [1, 2, 3])) { error in
+            guard case PkiError.invalidInput = error else { return XCTFail("\(error)") }
+        }
+        XCTAssertEqual(try v.setTsl(tsl: try load("tsl.xml")), info)
+        XCTAssertEqual(try v.tslInfo(), info)
+        XCTAssertEqual(try v.cacheStats().ocspEntries, 0)
+    }
+
     func testFailures() async throws {
         let v = try verifier()
         let expired = try load("expired.der"), wrongKu = try load("wrong-key-usage.der"), unknown = try load("unknown-ca.der")

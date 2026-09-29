@@ -52,5 +52,43 @@ public enum PkiError: Error, Equatable, Sendable {
     case verificationFailed(VerificationFailure)
     /// Malformed certificate, TSL or arguments.
     case invalidInput(String)
+    /// A TSL could not be downloaded (network, HTTP status, hash mismatch).
+    case downloadFailed(String)
+}
+
+/// The TSL a verifier currently uses.
+public struct TslInfo: Equatable, Sendable {
+    /// `Id` attribute of the TrustServiceStatusList.
+    public var id: String
+    public var sequenceNumber: Int64
+    /// ListIssueDateTime and NextUpdate, RFC 3339 (empty if absent).
+    public var issueDate: String
+    public var nextUpdate: String
+    /// Hex SHA-256 of the TSL bytes, as published in the `.sha2` file next to it.
+    public var sha256: String
+    /// NextUpdate has passed: the TSL should be refreshed.
+    public var expired: Bool
+
+    public init(id: String, sequenceNumber: Int64, issueDate: String, nextUpdate: String, sha256: String, expired: Bool) {
+        self.id = id
+        self.sequenceNumber = sequenceNumber
+        self.issueDate = issueDate
+        self.nextUpdate = nextUpdate
+        self.sha256 = sha256
+        self.expired = expired
+    }
+}
+
+/// OCSP response cache of a verifier.
+public struct CacheStats: Equatable, Sendable {
+    public var ocspHits: UInt64
+    public var ocspMisses: UInt64
+    public var ocspEntries: UInt32
+
+    public init(ocspHits: UInt64, ocspMisses: UInt64, ocspEntries: UInt32) {
+        self.ocspHits = ocspHits
+        self.ocspMisses = ocspMisses
+        self.ocspEntries = ocspEntries
+    }
 }
 

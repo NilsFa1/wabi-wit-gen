@@ -125,6 +125,7 @@ type tucPki018 struct {
 	trust       *trustList
 	now         time.Time
 	ocsp        *gempki.OCSPChecker // nil: no OCSP check (SW_1039)
+	ocspCache   *ocspCache          // shared by the verifier's verifications
 }
 
 // verify runs TUC_PKI_018 and returns the profile that matched, or the
@@ -209,7 +210,16 @@ func (c *tucPki018) ocspCheck(ctx context.Context, cert *x509.Certificate, issue
 	checker := *c.ocsp
 	checker.ResponderURL = strings.TrimSpace(issuer.supplyPoints[0])
 	checker.Clock = func() time.Time { return c.now }
-	res, err := checker.Check(ctx, cert, issuer.cert)
+	fetch := func(ctx context.Context) (*gempki.RevocationResult, error) {
+		return checker.Check(ctx, cert, issuer.cert)
+	}
+	var res *gempki.RevocationResult
+	var err error
+	if c.ocspCache != nil {
+		res, err = c.ocspCache.check(ctx, cert, issuer.cert, c.now, fetch)
+	} else {
+		res, err = fetch(ctx)
+	}
 	if err != nil {
 		var ve *gempki.ValidationError
 		if errors.As(err, &ve) {
@@ -331,12 +341,15 @@ func extKeyUsageOIDs(cert *x509.Certificate) []string {
 
 // policyOIDs is gemLibPki's getCertificatePolicyOids: SE_1033 without a policy.
 func policyOIDs(cert *x509.Certificate) (map[string]bool, *pkiFailure) {
-	if !hasExtension(cert, oidCertificatePolicies) || len(cert.PolicyIdentifiers) == 0 {
-		return nil, fail(se1033)
-	}
 	out := map[string]bool{}
+	for _, oid := range cert.Policies { // x509.OID: also OIDs that do not fit asn1.ObjectIdentifier
+		out[oid.String()] = true
+	}
 	for _, oid := range cert.PolicyIdentifiers {
 		out[oid.String()] = true
+	}
+	if !hasExtension(cert, oidCertificatePolicies) || len(out) == 0 {
+		return nil, fail(se1033)
 	}
 	return out, nil
 }

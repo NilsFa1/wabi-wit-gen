@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gematik/zero-lab/go/gempki"
@@ -44,11 +45,8 @@ type trustList struct {
 	responders []*x509.Certificate // OCSP signers listed in the TSL
 }
 
-func parseTrustList(raw []byte) (*trustList, error) {
-	list, err := tsl.Parse(bytes.NewReader(raw), "")
-	if err != nil {
-		return nil, fmt.Errorf("TSL could not be parsed: %v", err)
-	}
+// trustListOf extracts the CA/PKC services and OCSP responders of a parsed TSL.
+func trustListOf(list *tsl.List) (*trustList, error) {
 	if len(list.TrustServiceProviderList) == 0 {
 		return nil, fmt.Errorf("TSL lists no trust service providers")
 	}
@@ -83,39 +81,57 @@ func parseTrustList(raw []byte) (*trustList, error) {
 
 type certificateVerifier struct {
 	productType string
-	tslRaw      []byte
+	http        *http.Client
+	nowFunc     func() time.Time
+	ocsp        *ocspCache
+	ocspMaxAge  time.Duration // producedAt window; 0 = gempki's default (37.5 s, as TUC_PKI_006)
 
-	once    sync.Once // the TSL is parsed on first use (the constructor cannot fail)
-	trust   *trustList
-	tslErr  error
-	http    *http.Client
-	nowFunc func() time.Time
+	mu       sync.Mutex // serializes TSL changes; readers use the atomic pointer
+	initial  []byte     // constructor TSL, parsed on first use (the constructor cannot fail)
+	snapshot atomic.Pointer[tslSnapshot]
 }
 
 // newCertificateVerifier is the constructor the generated dispatcher calls.
 func newCertificateVerifier(productType string, tslXML []byte) CertificateVerifier {
 	return &certificateVerifier{
 		productType: productType,
-		tslRaw:      bytes.Clone(tslXML),
+		initial:     bytes.Clone(tslXML),
 		http:        &http.Client{Timeout: 10 * time.Second},
 		nowFunc:     time.Now,
+		ocsp:        newOCSPCache(),
 	}
 }
 
 func (v *certificateVerifier) Close() {}
 
-func (v *certificateVerifier) trustList() (*trustList, error) {
-	v.once.Do(func() { v.trust, v.tslErr = parseTrustList(v.tslRaw) })
-	return v.trust, v.tslErr
+// current returns the TSL in use, parsing the constructor's TSL on first use.
+func (v *certificateVerifier) current() (*tslSnapshot, error) {
+	if s := v.snapshot.Load(); s != nil {
+		return s, nil
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if s := v.snapshot.Load(); s != nil {
+		return s, nil
+	}
+	s, err := loadSnapshot(v.initial)
+	if err != nil {
+		return nil, err
+	}
+	v.snapshot.Store(s)
+	return s, nil
 }
 
 func invalidInput(m string) *PkiError { return &PkiError{Tag: PkiErrorInvalidInput, InvalidInput: m} }
+func downloadFailed(m string) *PkiError {
+	return &PkiError{Tag: PkiErrorDownloadFailed, DownloadFailed: m}
+}
 
 func (v *certificateVerifier) Verify(ctx context.Context, der []byte, profiles []CertificateProfile, withOcsp bool) (Admission, *PkiError) {
 	if len(profiles) == 0 {
 		return Admission{}, invalidInput("at least one certificate profile is required")
 	}
-	trust, err := v.trustList()
+	snap, err := v.current()
 	if err != nil {
 		return Admission{}, invalidInput(err.Error())
 	}
@@ -123,9 +139,11 @@ func (v *certificateVerifier) Verify(ctx context.Context, der []byte, profiles [
 	if err != nil {
 		return Admission{}, invalidInput("certificate is not a DER-encoded X.509 certificate: " + err.Error())
 	}
-	c := &tucPki018{productType: v.productType, trust: trust, now: v.nowFunc().UTC()}
+	c := &tucPki018{productType: v.productType, trust: snap.trust, now: v.nowFunc().UTC()}
 	if withOcsp {
-		c.ocsp = &gempki.OCSPChecker{HTTPClient: v.http, TSLResponders: trust.responders, RequireCertHash: true}
+		c.ocsp = &gempki.OCSPChecker{HTTPClient: v.http, TSLResponders: snap.trust.responders, RequireCertHash: true,
+			MaxResponseAge: v.ocspMaxAge}
+		c.ocspCache = v.ocsp
 	}
 	profile, failure := c.verify(ctx, cert, profiles)
 	if failure != nil {
@@ -133,3 +151,42 @@ func (v *certificateVerifier) Verify(ctx context.Context, der []byte, profiles [
 	}
 	return admissionOf(cert, profile), nil
 }
+
+func (v *certificateVerifier) TslInfo() (TslInfo, *PkiError) {
+	snap, err := v.current()
+	if err != nil {
+		return TslInfo{}, invalidInput(err.Error())
+	}
+	return snap.infoAt(v.nowFunc()), nil
+}
+
+func (v *certificateVerifier) SetTsl(raw []byte) (TslInfo, *PkiError) {
+	snap, err := loadSnapshot(raw)
+	if err != nil {
+		return TslInfo{}, invalidInput(err.Error())
+	}
+	v.mu.Lock()
+	v.snapshot.Store(snap)
+	v.mu.Unlock()
+	return snap.infoAt(v.nowFunc()), nil
+}
+
+func (v *certificateVerifier) RefreshTsl(ctx context.Context, url string) (*[]byte, *PkiError) {
+	current := ""
+	if snap, err := v.current(); err == nil {
+		current = snap.hash
+	}
+	raw, err := fetchIfChanged(ctx, v.http, url, current)
+	if err != nil {
+		return nil, downloadFailed(err.Error())
+	}
+	if raw == nil {
+		return nil, nil
+	}
+	if _, e := v.SetTsl(raw); e != nil {
+		return nil, e
+	}
+	return &raw, nil
+}
+
+func (v *certificateVerifier) CacheStats() CacheStats { return v.ocsp.stats() }

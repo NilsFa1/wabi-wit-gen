@@ -44,7 +44,57 @@ public final class CoreGlue implements CorePackage {
                 if (r.remaining() != 0) throw new AbiException(Status.INVALID_ARGUMENT, "constructor: trailing bytes");
                 w.writeUInt64(Handles.add(Handles.OBJECT, impl.newCertificateVerifier(productType, tsl)));
             }
-            case MethodIds.CERTIFICATE_VERIFIER_VERIFY -> throw new AbiException(Status.UNSUPPORTED, "async method called synchronously");
+            case MethodIds.CERTIFICATE_VERIFIER_TSL_INFO -> {
+                final var self = Handles.object(object, CertificateVerifierResource.class);
+                var r = new MsgPackReader(request);
+                if (r.readArrayHeader() != 0) throw new AbiException(Status.INVALID_ARGUMENT, "tsl-info: expected 0 parameters");
+                if (r.remaining() != 0) throw new AbiException(Status.INVALID_ARGUMENT, "tsl-info: trailing bytes");
+                try {
+                    final TslInfo ret = self.tslInfo();
+                    w.writeArrayHeader(2);
+                    w.writeUInt(0);
+                    WireCodec.writeTslInfo(w, ret);
+                } catch (RuntimeException failure) {
+                    Throwable cause = failure;
+                    if (!(cause instanceof PkiException e)) throw failure;
+                    w.writeArrayHeader(2);
+                    w.writeUInt(1);
+                    WireCodec.writePkiError(w, e.error());
+                }
+            }
+            case MethodIds.CERTIFICATE_VERIFIER_SET_TSL -> {
+                final var self = Handles.object(object, CertificateVerifierResource.class);
+                var r = new MsgPackReader(request);
+                if (r.readArrayHeader() != 1) throw new AbiException(Status.INVALID_ARGUMENT, "set-tsl: expected 1 parameters");
+                final byte[] tsl = r.readBinary();
+                if (r.remaining() != 0) throw new AbiException(Status.INVALID_ARGUMENT, "set-tsl: trailing bytes");
+                try {
+                    final TslInfo ret = self.setTsl(tsl);
+                    w.writeArrayHeader(2);
+                    w.writeUInt(0);
+                    WireCodec.writeTslInfo(w, ret);
+                } catch (RuntimeException failure) {
+                    Throwable cause = failure;
+                    if (!(cause instanceof PkiException e)) throw failure;
+                    w.writeArrayHeader(2);
+                    w.writeUInt(1);
+                    WireCodec.writePkiError(w, e.error());
+                }
+            }
+            case MethodIds.CERTIFICATE_VERIFIER_CACHE_STATS -> {
+                final var self = Handles.object(object, CertificateVerifierResource.class);
+                var r = new MsgPackReader(request);
+                if (r.readArrayHeader() != 0) throw new AbiException(Status.INVALID_ARGUMENT, "cache-stats: expected 0 parameters");
+                if (r.remaining() != 0) throw new AbiException(Status.INVALID_ARGUMENT, "cache-stats: trailing bytes");
+                try {
+                    final CacheStats ret = self.cacheStats();
+                    WireCodec.writeCacheStats(w, ret);
+                } catch (RuntimeException failure) {
+                    Throwable cause = failure;
+                    throw failure;
+                }
+            }
+            case MethodIds.CERTIFICATE_VERIFIER_VERIFY, MethodIds.CERTIFICATE_VERIFIER_REFRESH_TSL -> throw new AbiException(Status.UNSUPPORTED, "async method called synchronously");
             default -> throw new AbiException(Status.UNKNOWN_METHOD, "unknown method id");
         }
         return w.toByteArray();
@@ -85,7 +135,37 @@ public final class CoreGlue implements CorePackage {
                     });
                 };
             }
-            case MethodIds.CERTIFICATE_VERIFIER_CONSTRUCTOR -> throw new AbiException(Status.UNSUPPORTED, "sync method called asynchronously");
+            case MethodIds.CERTIFICATE_VERIFIER_REFRESH_TSL -> {
+                final var self = Handles.object(object, CertificateVerifierResource.class);
+                var r = new MsgPackReader(request);
+                if (r.readArrayHeader() != 1) throw new AbiException(Status.INVALID_ARGUMENT, "refresh-tsl: expected 1 parameters");
+                final String url = r.readString();
+                if (r.remaining() != 0) throw new AbiException(Status.INVALID_ARGUMENT, "refresh-tsl: trailing bytes");
+                return () -> {
+                    CompletionStage<java.util.Optional<byte[]>> stage;
+                    try {
+                        stage = self.refreshTsl(url);
+                    } catch (RuntimeException e) {
+                        stage = CompletableFuture.failedFuture(e);
+                    }
+                    return stage.handle((ret, failure) -> {
+                        var w = new MsgPackWriter();
+                        if (failure == null) {
+                            w.writeArrayHeader(2);
+                            w.writeUInt(0);
+                            if (ret.isPresent()) { var x1 = ret.get(); w.writeBinary(x1); } else { w.writeNil(); }
+                            return w.toByteArray();
+                        }
+                        Throwable cause = unwrap(failure);
+                        if (!(cause instanceof PkiException e)) throw new CompletionException(cause);
+                        w.writeArrayHeader(2);
+                        w.writeUInt(1);
+                        WireCodec.writePkiError(w, e.error());
+                        return w.toByteArray();
+                    });
+                };
+            }
+            case MethodIds.CERTIFICATE_VERIFIER_CONSTRUCTOR, MethodIds.CERTIFICATE_VERIFIER_TSL_INFO, MethodIds.CERTIFICATE_VERIFIER_SET_TSL, MethodIds.CERTIFICATE_VERIFIER_CACHE_STATS -> throw new AbiException(Status.UNSUPPORTED, "sync method called asynchronously");
             default -> throw new AbiException(Status.UNKNOWN_METHOD, "unknown method id");
         }
     }

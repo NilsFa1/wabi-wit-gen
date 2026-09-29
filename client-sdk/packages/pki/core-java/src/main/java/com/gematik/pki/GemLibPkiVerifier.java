@@ -8,7 +8,20 @@ import de.gematik.pki.gemlibpki.certificate.TucPki018Verifier;
 import de.gematik.pki.gemlibpki.tsl.TslConverter;
 import de.gematik.pki.gemlibpki.tsl.TslInformationProvider;
 import de.gematik.pki.gemlibpki.tsl.TspService;
+import de.gematik.pki.gemlibpki.ocsp.OcspRespCache;
 import java.io.ByteArrayInputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HexFormat;
+import java.util.Optional;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -19,32 +32,144 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 final class GemLibPkiVerifier implements CertificateVerifierResource {
+    /** OCSP responses are reused for this long (gemLibPki's OcspRespCache, keyed by serial number). */
+    static final int OCSP_CACHE_SECONDS = 300;
+
+    /** The TSL in use: immutable, swapped atomically by setTsl / refreshTsl. */
+    record Snapshot(byte[] raw, String sha256, List<TspService> services, TslInfo info, ZonedDateTime nextUpdate) {}
+
     private final String productType;
-    private final byte[] tsl;
-    private volatile List<TspService> tspServices; // parsed on first use
+    private final byte[] initialTsl; // parsed on first use (the constructor cannot fail)
+    private volatile Snapshot snapshot;
+    private final OcspRespCache ocspCache = new OcspRespCache(OCSP_CACHE_SECONDS);
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     GemLibPkiVerifier(String productType, byte[] tsl) {
         this.productType = productType;
-        this.tsl = tsl.clone();
+        this.initialTsl = tsl.clone();
     }
 
     private static PkiException invalid(String message) {
         return new PkiException(new PkiError.InvalidInput(message));
     }
 
-    private List<TspService> tspServices() {
-        var services = tspServices;
-        if (services == null) {
-            final eu.europa.esig.trustedlist.jaxb.tsl.TrustStatusListType parsed;
-            try {
-                parsed = TslConverter.bytesToTsl(tsl).orElseThrow(() -> invalid("TSL could not be parsed"));
-            } catch (GemPkiRuntimeException e) {
-                throw invalid("TSL could not be parsed: " + e.getMessage());
-            }
-            if (parsed.getTrustServiceProviderList() == null) throw invalid("TSL lists no trust service providers");
-            tspServices = services = new TslInformationProvider(parsed).getTspServices();
+    private static String sha256Hex(byte[] b) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(b));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
-        return services;
+    }
+
+    private static String rfc3339(javax.xml.datatype.XMLGregorianCalendar c) {
+        return c == null ? "" : c.toGregorianCalendar().toZonedDateTime().withZoneSameInstant(ZoneOffset.UTC)
+                .truncatedTo(java.time.temporal.ChronoUnit.SECONDS).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                .replace("+00:00", "Z");
+    }
+
+    static Snapshot parse(byte[] raw) {
+        final eu.europa.esig.trustedlist.jaxb.tsl.TrustStatusListType parsed;
+        try {
+            parsed = TslConverter.bytesToTsl(raw).orElseThrow(() -> invalid("TSL could not be parsed"));
+        } catch (GemPkiRuntimeException e) {
+            throw invalid("TSL could not be parsed: " + e.getMessage());
+        }
+        if (parsed.getTrustServiceProviderList() == null) throw invalid("TSL lists no trust service providers");
+        var si = parsed.getSchemeInformation();
+        var next = si == null || si.getNextUpdate() == null ? null : si.getNextUpdate().getDateTime();
+        var hash = sha256Hex(raw);
+        var info = new TslInfo(
+                Objects.toString(parsed.getId(), ""),
+                si == null || si.getTSLSequenceNumber() == null ? 0 : si.getTSLSequenceNumber().longValue(),
+                si == null ? "" : rfc3339(si.getListIssueDateTime()),
+                rfc3339(next),
+                hash,
+                false);
+        return new Snapshot(raw.clone(), hash, new TslInformationProvider(parsed).getTspServices(), info,
+                next == null ? null : next.toGregorianCalendar().toZonedDateTime());
+    }
+
+    private Snapshot current() {
+        var s = snapshot;
+        if (s == null) {
+            synchronized (this) {
+                if (snapshot == null) snapshot = parse(initialTsl);
+                s = snapshot;
+            }
+        }
+        return s;
+    }
+
+    private static TslInfo infoAt(Snapshot s) {
+        var expired = s.nextUpdate() != null && ZonedDateTime.now(ZoneOffset.UTC).isAfter(s.nextUpdate());
+        var i = s.info();
+        return new TslInfo(i.id(), i.sequenceNumber(), i.issueDate(), i.nextUpdate(), i.sha256(), expired);
+    }
+
+    @Override
+    public TslInfo tslInfo() {
+        return infoAt(current());
+    }
+
+    @Override
+    public TslInfo setTsl(byte[] tsl) {
+        var s = parse(tsl); // throws on a TSL that does not parse: the current one stays
+        synchronized (this) {
+            snapshot = s;
+        }
+        return infoAt(s);
+    }
+
+    @Override
+    public CompletionStage<Optional<byte[]>> refreshTsl(String url) {
+        if (!url.toLowerCase(java.util.Locale.ROOT).endsWith(".xml")) {
+            return CompletableFuture.failedFuture(downloadFailed("TSL URL must end in .xml: " + url));
+        }
+        String current;
+        try {
+            current = current().sha256();
+        } catch (PkiException e) {
+            current = "";
+        }
+        final var known = current;
+        var sha2Url = url.substring(0, url.length() - 4) + ".sha2";
+        return get(sha2Url).thenCompose(hashBytes -> {
+            var announced = new String(hashBytes, StandardCharsets.US_ASCII).trim().toLowerCase(java.util.Locale.ROOT);
+            if (announced.equals(known)) return CompletableFuture.completedFuture(Optional.<byte[]>empty());
+            return get(url).thenApply(raw -> {
+                var got = sha256Hex(raw);
+                if (!got.equals(announced)) {
+                    throw downloadFailed("downloaded TSL has SHA-256 " + got + ", " + sha2Url + " announces " + announced);
+                }
+                setTsl(raw);
+                return Optional.of(raw);
+            });
+        });
+    }
+
+    private static PkiException downloadFailed(String message) {
+        return new PkiException(new PkiError.DownloadFailed(message));
+    }
+
+    private CompletableFuture<byte[]> get(String url) {
+        HttpRequest req;
+        try {
+            req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).GET().build();
+        } catch (IllegalArgumentException e) {
+            return CompletableFuture.failedFuture(downloadFailed("invalid URL " + url + ": " + e.getMessage()));
+        }
+        return http.sendAsync(req, HttpResponse.BodyHandlers.ofByteArray())
+                .handle((resp, err) -> {
+                    if (err != null) throw downloadFailed("GET " + url + ": " + err);
+                    if (resp.statusCode() != 200) throw downloadFailed("GET " + url + ": HTTP " + resp.statusCode());
+                    return resp.body();
+                });
+    }
+
+    @Override
+    public CacheStats cacheStats() {
+        // gemLibPki's cache exposes its size only
+        return new CacheStats(0, 0, ocspCache.getSize());
     }
 
     /** gemLibPki's Admission accessors throw if the certificate has no admission extension. */
@@ -100,7 +225,7 @@ final class GemLibPkiVerifier implements CertificateVerifierResource {
         } catch (CertificateException | RuntimeException e) {
             throw invalid("certificate is not a DER-encoded X.509 certificate: " + e.getMessage());
         }
-        var services = tspServices();
+        var services = current().services();
 
         // Like gemLibPki: the first profile that verifies wins; otherwise report
         // the first error (code) and all messages. Checking one profile at a time
@@ -114,6 +239,7 @@ final class GemLibPkiVerifier implements CertificateVerifierResource {
                         .tspServiceList(services)
                         .certificateProfiles(List.of(toGemLib(profile)))
                         .withOcspCheck(withOcsp)
+                        .ocspRespCache(ocspCache)
                         .build()
                         .performTucPki18Checks(cert);
                 return new Admission(

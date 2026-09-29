@@ -51,6 +51,19 @@ void main() {
     expect(verifier.verify(Uint8List.fromList([1, 2, 3]), aut, false), throwsA(isA<PkiErrorInvalidInput>()));
   });
 
+  test('TSL info, swap and cache statistics', () {
+    final info = verifier.tslInfo();
+    expect(info.id, 'TSL-PoC');
+    expect(info.sequenceNumber, 1);
+    expect(info.nextUpdate, '2046-09-29T00:00:00Z');
+    expect(info.sha256, hasLength(64));
+    expect(info.expired, isFalse);
+    expect(() => verifier.setTsl(Uint8List.fromList([1, 2, 3])), throwsA(isA<PkiErrorInvalidInput>()));
+    expect(verifier.setTsl(load('tsl.xml')), info);
+    expect(verifier.tslInfo(), info);
+    expect(verifier.cacheStats().ocspEntries, 0);
+  });
+
   test('concurrent verifications', () async {
     final all = await Future.wait([for (var i = 0; i < 16; i++) verifier.verify(load('valid.der'), aut, false)]);
     expect(all.every((a) => a.registrationNumber == '1-2-ARZT-Test-01'), isTrue);

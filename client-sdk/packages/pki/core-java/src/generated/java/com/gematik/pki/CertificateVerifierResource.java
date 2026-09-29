@@ -15,4 +15,29 @@ public interface CertificateVerifierResource extends acme.core.runtime.CoreObjec
      */
     /** Domain errors: {@link PkiException}. */
     java.util.concurrent.CompletionStage<Admission> verify(byte[] certificate, java.util.List<CertificateProfile> profiles, boolean withOcsp);
+    /**
+     * The TSL in use (parsed on first use).
+     */
+    /** Domain errors: {@link PkiException}. */
+    TslInfo tslInfo();
+    /**
+     * Replaces the TSL, e.g. with a persisted last-good copy. A TSL that
+     * does not parse is rejected and the current one stays; verifications
+     * in flight finish with the TSL they started with.
+     */
+    /** Domain errors: {@link PkiException}. */
+    TslInfo setTsl(byte[] tsl);
+    /**
+     * Checks `<url with .xml replaced by .sha2>` and, only if the hash
+     * differs from the TSL in use, downloads `url`, checks it against that
+     * hash and switches to it. Returns the new TSL bytes (for the app to
+     * persist) or none if the TSL is unchanged.
+     */
+    /** Domain errors: {@link PkiException}. */
+    java.util.concurrent.CompletionStage<java.util.Optional<byte[]>> refreshTsl(String url);
+    /**
+     * OCSP cache statistics (responses are cached per certificate until
+     * their nextUpdate, at most a few minutes).
+     */
+    CacheStats cacheStats();
 }

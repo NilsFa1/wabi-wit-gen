@@ -62,6 +62,59 @@ public final class CertificateVerifier: @unchecked Sendable {
         return try Admission.decode(from: r)
     }
 
+    /// The TSL in use (parsed on first use).
+    public func tslInfo() throws -> TslInfo {
+        let (backend, h) = try object()
+        let w = MsgPackWriter()
+        w.writeArrayHeader(0)
+        let r = MsgPackReader(try backend.callSync(h, MethodIds.certificateVerifierTslInfo, w.bytes))
+        if try r.readResultTag() != 0 {
+            throw try PkiError.decode(from: r)
+        }
+        return try TslInfo.decode(from: r)
+    }
+
+    /// Replaces the TSL, e.g. with a persisted last-good copy. A TSL that
+    /// does not parse is rejected and the current one stays; verifications
+    /// in flight finish with the TSL they started with.
+    public func setTsl(tsl: [UInt8]) throws -> TslInfo {
+        let (backend, h) = try object()
+        let w = MsgPackWriter()
+        w.writeArrayHeader(1)
+        w.writeBinary(tsl)
+        let r = MsgPackReader(try backend.callSync(h, MethodIds.certificateVerifierSetTsl, w.bytes))
+        if try r.readResultTag() != 0 {
+            throw try PkiError.decode(from: r)
+        }
+        return try TslInfo.decode(from: r)
+    }
+
+    /// Checks `<url with .xml replaced by .sha2>` and, only if the hash
+    /// differs from the TSL in use, downloads `url`, checks it against that
+    /// hash and switches to it. Returns the new TSL bytes (for the app to
+    /// persist) or none if the TSL is unchanged.
+    public func refreshTsl(url: String) async throws -> [UInt8]? {
+        let (backend, h) = try object()
+        let w = MsgPackWriter()
+        w.writeArrayHeader(1)
+        w.writeString(url)
+        let r = MsgPackReader(try await backend.callAsync(h, MethodIds.certificateVerifierRefreshTsl, w.bytes))
+        if try r.readResultTag() != 0 {
+            throw try PkiError.decode(from: r)
+        }
+        return try r.readOptional { r1 in try r1.readBinary() }
+    }
+
+    /// OCSP cache statistics (responses are cached per certificate until
+    /// their nextUpdate, at most a few minutes).
+    public func cacheStats() throws -> CacheStats {
+        let (backend, h) = try object()
+        let w = MsgPackWriter()
+        w.writeArrayHeader(0)
+        let r = MsgPackReader(try backend.callSync(h, MethodIds.certificateVerifierCacheStats, w.bytes))
+        return try CacheStats.decode(from: r)
+    }
+
     /// Releases the native object now (otherwise released on deinit).
     /// In-flight calls fail, event sequences finish. Idempotent.
     public func close() {

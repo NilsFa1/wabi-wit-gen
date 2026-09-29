@@ -46,11 +46,34 @@ interface types {
         verification-failed(verification-failure),
         /// Malformed certificate, TSL or arguments.
         invalid-input(string),
+        /// A TSL could not be downloaded (network, HTTP status, hash mismatch).
+        download-failed(string),
+    }
+
+    /// The TSL a verifier currently uses.
+    record tsl-info {
+        /// `Id` attribute of the TrustServiceStatusList.
+        id: string,
+        sequence-number: s64,
+        /// ListIssueDateTime and NextUpdate, RFC 3339 (empty if absent).
+        issue-date: string,
+        next-update: string,
+        /// Hex SHA-256 of the TSL bytes, as published in the `.sha2` file next to it.
+        sha256: string,
+        /// NextUpdate has passed: the TSL should be refreshed.
+        expired: bool,
+    }
+
+    /// OCSP response cache of a verifier.
+    record cache-stats {
+        ocsp-hits: u64,
+        ocsp-misses: u64,
+        ocsp-entries: u32,
     }
 }
 
 interface verifier {
-    use types.{certificate-profile, admission, pki-error};
+    use types.{certificate-profile, admission, pki-error, tsl-info, cache-stats};
 
     /// TUC_PKI_018 certificate verification against the trust anchors of a TSL.
     resource certificate-verifier {
@@ -62,6 +85,24 @@ interface verifier {
         /// (the first matching profile wins). OCSP is only queried if
         /// `with-ocsp` is set (needs network access to the TSL's responder).
         verify: async func(certificate: list<u8>, profiles: list<certificate-profile>, with-ocsp: bool) -> result<admission, pki-error>;
+
+        /// The TSL in use (parsed on first use).
+        tsl-info: func() -> result<tsl-info, pki-error>;
+
+        /// Replaces the TSL, e.g. with a persisted last-good copy. A TSL that
+        /// does not parse is rejected and the current one stays; verifications
+        /// in flight finish with the TSL they started with.
+        set-tsl: func(tsl: list<u8>) -> result<tsl-info, pki-error>;
+
+        /// Checks `<url with .xml replaced by .sha2>` and, only if the hash
+        /// differs from the TSL in use, downloads `url`, checks it against that
+        /// hash and switches to it. Returns the new TSL bytes (for the app to
+        /// persist) or none if the TSL is unchanged.
+        refresh-tsl: async func(url: string) -> result<option<list<u8>>, pki-error>;
+
+        /// OCSP cache statistics (responses are cached per certificate until
+        /// their nextUpdate, at most a few minutes).
+        cache-stats: func() -> cache-stats;
     }
 }
 

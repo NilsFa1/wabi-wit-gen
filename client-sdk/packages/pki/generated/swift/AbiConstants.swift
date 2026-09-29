@@ -15,6 +15,10 @@ public enum Contract {
 enum MethodIds {
     static let certificateVerifierConstructor: UInt32 = 0x0100
     static let certificateVerifierVerify: UInt32 = 0x0101
+    static let certificateVerifierTslInfo: UInt32 = 0x0102
+    static let certificateVerifierSetTsl: UInt32 = 0x0103
+    static let certificateVerifierRefreshTsl: UInt32 = 0x0104
+    static let certificateVerifierCacheStats: UInt32 = 0x0105
 }
 
 /// ABI 1.1 status codes and capability bits (mirrors abi/acme_abi.h).

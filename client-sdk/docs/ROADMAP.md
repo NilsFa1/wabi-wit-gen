@@ -99,11 +99,13 @@ eager Stub mit ABI 1.0 und kann noch keine Host-Calls auslösen. Dafür braucht 
 **Status:** TUC_PKI_018 im TSL-Vertrauensmodell (TI 1.0) nach gemLibPki 5.0.2,
 nur ECC; Builds für Linux/Windows/macOS/Android/iOS. Offen:
 
-* TSL-Manager: TSL laden/aktualisieren (`.sha2`-Abgleich), Signatur prüfen
-  (TUC_PKI_001, XAdES), NextUpdate mit Karenz, gemeinsamer Stand für alle Verifier,
-  letzte gültige TSL persistieren (optional über Host-Calls der App),
-* OCSP: Antwort-Cache (CertID als Schlüssel, nextUpdate, LRU, gebündelte
-  Anfragen), Nonce (TE_1057), HTTP optional über Host-Calls,
+* ~~TSL-Manager: `set-tsl`, `refresh-tsl` (`.sha2`-Abgleich), `tsl-info`,
+  atomarer Wechsel~~ und ~~OCSP-Cache (CertID, nextUpdate, LRU, gebündelte
+  Anfragen)~~ — erledigt, auch im Java-Core (dort gemLibPki-`OcspRespCache`),
+* TSL-Signatur prüfen (TUC_PKI_001, XAdES), Sequenznummer darf nicht sinken,
+  NextUpdate mit Karenz erzwingen (heute nur `tsl-info.expired`),
+* OCSP-Nonce (TE_1057); HTTP für TSL/OCSP optional über Host-Calls der App,
+* `refresh-tsl` im Java-Core als native-image ungetestet (nur auf der JVM),
 * Differenztests gegen den Java-Core mit gemLibPki 5.0.2 und dessen Testdaten,
 * rechtliche Prüfung: EUPL bei statischem Linken (iOS) und App-Store-Bedingungen.
 

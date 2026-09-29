@@ -111,3 +111,72 @@ final class PkiErrorInvalidInput extends PkiError {
   String toString() => 'PkiErrorInvalidInput(value: $value)';
 }
 
+/// A TSL could not be downloaded (network, HTTP status, hash mismatch).
+final class PkiErrorDownloadFailed extends PkiError {
+  const PkiErrorDownloadFailed(this.value);
+
+  final String value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is PkiErrorDownloadFailed && value == other.value;
+
+  @override
+  int get hashCode => Object.hash(PkiErrorDownloadFailed, value);
+
+  @override
+  String toString() => 'PkiErrorDownloadFailed(value: $value)';
+}
+
+/// The TSL a verifier currently uses.
+final class TslInfo {
+  const TslInfo({required this.id, required this.sequenceNumber, required this.issueDate, required this.nextUpdate, required this.sha256, required this.expired});
+
+  /// `Id` attribute of the TrustServiceStatusList.
+  final String id;
+
+  final int sequenceNumber;
+
+  /// ListIssueDateTime and NextUpdate, RFC 3339 (empty if absent).
+  final String issueDate;
+
+  final String nextUpdate;
+
+  /// Hex SHA-256 of the TSL bytes, as published in the `.sha2` file next to it.
+  final String sha256;
+
+  /// NextUpdate has passed: the TSL should be refreshed.
+  final bool expired;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is TslInfo && id == other.id && sequenceNumber == other.sequenceNumber && issueDate == other.issueDate && nextUpdate == other.nextUpdate && sha256 == other.sha256 && expired == other.expired;
+
+  @override
+  int get hashCode => Object.hash(id, sequenceNumber, issueDate, nextUpdate, sha256, expired);
+
+  @override
+  String toString() => 'TslInfo(id: $id, sequenceNumber: $sequenceNumber, issueDate: $issueDate, nextUpdate: $nextUpdate, sha256: $sha256, expired: $expired)';
+}
+
+/// OCSP response cache of a verifier.
+final class CacheStats {
+  const CacheStats({required this.ocspHits, required this.ocspMisses, required this.ocspEntries});
+
+  final int ocspHits;
+
+  final int ocspMisses;
+
+  final int ocspEntries;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is CacheStats && ocspHits == other.ocspHits && ocspMisses == other.ocspMisses && ocspEntries == other.ocspEntries;
+
+  @override
+  int get hashCode => Object.hash(ocspHits, ocspMisses, ocspEntries);
+
+  @override
+  String toString() => 'CacheStats(ocspHits: $ocspHits, ocspMisses: $ocspMisses, ocspEntries: $ocspEntries)';
+}
+
