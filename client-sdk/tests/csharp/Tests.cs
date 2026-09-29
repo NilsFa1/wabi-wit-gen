@@ -98,7 +98,7 @@ public static class Program
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             c.SendCommandAsync(new Command("sleep", Encoding.UTF8.GetBytes("5000")), cts.Token));
         Assert.True(sw.ElapsedMilliseconds < 2000, $"cancel took {sw.ElapsedMilliseconds} ms");
-        // Already-cancelled token: fails fast, the core never runs the call to completion.
+        // Already-cancelled token: fails fast, the call is never started (independent of core timing).
         await Assert.ThrowsAsync<OperationCanceledException>(() => c.GetCustomerAsync("4711", new CancellationToken(true)));
         // The client is still usable.
         Assert.Equal("4711", (await c.GetCustomerAsync("4711")).Id);

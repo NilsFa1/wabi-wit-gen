@@ -85,6 +85,9 @@ public sealed class NativeBackend : IClientBackend
 
     public Task<byte[]> CallAsync(ulong obj, uint methodId, byte[] request, CancellationToken cancellationToken)
     {
+        // .NET convention: an already-cancelled token never starts the operation
+        // (otherwise the outcome would depend on the core's scheduling).
+        if (cancellationToken.IsCancellationRequested) return Task.FromCanceled<byte[]>(cancellationToken);
         var (status, future) = StartCall(obj, methodId, request);
         if (status != AcmeStatus.Ok) return Task.FromException<byte[]>(Error(status));
         return CompleteAsync(future, cancellationToken);

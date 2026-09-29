@@ -96,6 +96,7 @@ public final class NativeBackend: ClientBackend, @unchecked Sendable {
     }
 
     public func callAsync(_ object: UInt64, _ methodId: UInt32, _ request: [UInt8]) async throws -> [UInt8] {
+        try Task.checkCancellation() // a cancelled task never starts the operation
         var future: UInt64 = 0
         let status = request.withUnsafeBufferPointer { p in
             acme_call_async(object, methodId, acme_bytes(ptr: p.baseAddress, len: p.count), &future)
