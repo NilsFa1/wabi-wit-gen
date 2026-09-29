@@ -66,7 +66,8 @@ final class AppKeys implements HostKeys {
   @override
   Future<Uint8List> sign(String keyId, Uint8List digest) async {
     if (keyId != 'dpop-key') throw ZeroErrorKeyNotFound(keyId);
-    await Future<void>.delayed(const Duration(milliseconds: 1)); // e.g. a biometric prompt
+    // e.g. a biometric prompt: answering later (and out of order) is fine
+    await Future<void>.delayed(Duration(milliseconds: Random().nextInt(6)));
     final signer = ECDSASigner(null, HMac(SHA256Digest(), 64)) // RFC 6979, digest given by the core
       ..init(true, PrivateKeyParameter<ECPrivateKey>(private));
     final sig = signer.generateSignature(digest) as ECSignature;
@@ -127,10 +128,14 @@ void main() {
       final signer = DpopSigner('dpop-key');
       final before = app.signatures;
       final proofs = await Future.wait(
-          [for (var i = 0; i < 16; i++) signer.createProof('POST', 'https://zero.example/$i', null, null)]);
-      expect(proofs.toSet().length, 16);
-      expect(app.signatures - before, 16);
-      expect(proofs.every(app.verifyJws), isTrue);
+          [for (var i = 0; i < 64; i++) signer.createProof('POST', 'https://zero.example/$i', null, null)]);
+      expect(proofs.toSet().length, 64);
+      expect(app.signatures - before, 64);
+      for (var i = 0; i < proofs.length; i++) { // every answer belongs to its own request
+        expect(app.verifyJws(proofs[i]), isTrue, reason: 'proof $i signed over its own content');
+        final claims = jsonDecode(utf8.decode(_unb64url(proofs[i].split('.')[1]))) as Map<String, dynamic>;
+        expect(claims['htu'], 'https://zero.example/$i');
+      }
       signer.close();
     });
 

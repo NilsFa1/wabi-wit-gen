@@ -48,8 +48,9 @@ public final class ZeroTests {
             if (!keyId.equals("dpop-key")) {
                 return CompletableFuture.failedFuture(new ZeroException(new ZeroError.KeyNotFound(keyId)));
             }
-            return CompletableFuture.supplyAsync(() -> { // answered later, on another thread
+            return CompletableFuture.supplyAsync(() -> { // answered later (out of order), on another thread
                 try {
+                    Thread.sleep(java.util.concurrent.ThreadLocalRandom.current().nextInt(6));
                     var s = Signature.getInstance("NONEwithECDSA"); // digest computed by the core
                     s.initSign(key.getPrivate());
                     s.update(digest);
@@ -155,17 +156,19 @@ public final class ZeroTests {
         test("concurrent proofs", () -> {
             try (var signer = new DpopSigner("dpop-key")) {
                 int before = app.signatures.get();
-                List<CompletableFuture<String>> all = IntStream.range(0, 16)
+                List<CompletableFuture<String>> all = IntStream.range(0, 64)
                         .mapToObj(i -> signer.createProof("POST", "https://zero.example/" + i, java.util.Optional.empty(), java.util.Optional.of("n")))
                         .toList();
                 var proofs = new HashSet<String>();
-                for (var f : all) {
-                    var jwt = f.get();
-                    check(app.verify(jwt), "signature");
+                for (int i = 0; i < all.size(); i++) { // every answer belongs to its own request
+                    var jwt = all.get(i).get();
+                    check(app.verify(jwt), "proof " + i + " signed over its own content");
+                    var claims = new String(Base64.getUrlDecoder().decode(jwt.split("\\.")[1]), StandardCharsets.UTF_8);
+                    check(claims.contains("\"htu\":\"https://zero.example/" + i + "\""), "proof " + i + " names its own URL");
                     proofs.add(jwt);
                 }
-                check(proofs.size() == 16, "distinct proofs");
-                check(app.signatures.get() - before == 16, "one signature per proof");
+                check(proofs.size() == 64, "distinct proofs");
+                check(app.signatures.get() - before == 64, "one signature per proof");
             }
         });
 

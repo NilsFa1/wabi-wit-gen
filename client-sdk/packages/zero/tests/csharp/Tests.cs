@@ -18,7 +18,8 @@ sealed class AppKeys : IHostKeys
     public async Task<byte[]> SignAsync(string keyId, byte[] digest)
     {
         if (keyId != "dpop-key") throw new ZeroException(new ZeroError.KeyNotFound(keyId));
-        await Task.Delay(1); // a real keystore may prompt the user: answering later is fine
+        // a real keystore may prompt the user: answering later (and out of order) is fine
+        await Task.Delay(Random.Shared.Next(0, 6));
         Interlocked.Increment(ref Signatures);
         return Key.SignHash(digest, DSASignatureFormat.Rfc3279DerSequence);
     }
@@ -87,9 +88,16 @@ static class Program
         {
             using var signer = new DpopSigner("dpop-key");
             var before = app.Signatures;
-            var proofs = await Task.WhenAll(Enumerable.Range(0, 16).Select(i => signer.CreateProofAsync("POST", $"https://zero.example/{i}", null, "n")));
-            Check(proofs.Distinct().Count() == 16, "distinct proofs (jti)");
-            Check(app.Signatures - before == 16, "one signature per proof");
+            var proofs = await Task.WhenAll(Enumerable.Range(0, 64).Select(i => signer.CreateProofAsync("POST", $"https://zero.example/{i}", null, "n")));
+            Check(proofs.Distinct().Count() == 64, "distinct proofs (jti)");
+            Check(app.Signatures - before == 64, "one signature per proof");
+            for (var i = 0; i < proofs.Length; i++) // every answer belongs to its own request
+            {
+                var parts = proofs[i].Split('.');
+                Check(Encoding.UTF8.GetString(B64Url(parts[1])).Contains($"\"htu\":\"https://zero.example/{i}\""), $"proof {i} names its own URL");
+                Check(app.Key.VerifyData(Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"), B64Url(parts[2]),
+                                         HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation), $"proof {i} signed over its own content");
+            }
         });
 
         await Test("app exception becomes the caller's ZeroException", async () =>

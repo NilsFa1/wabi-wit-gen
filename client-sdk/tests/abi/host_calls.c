@@ -110,7 +110,10 @@ static void answer(uint32_t method, const uint8_t *req, size_t len, uint64_t cal
 
 static void *worker(void *arg) {
     job *j = arg;
-    usleep(2000); /* answer LATER, from another thread */
+    /* answer LATER, from another thread, after a random 0-5 ms: with many calls
+     * open at once the replies arrive in a different order than the requests */
+    unsigned seed = (unsigned)j->call;
+    usleep((useconds_t)(rand_r(&seed) % 5000));
     answer(j->method, j->req, j->len, j->call);
     free(j->req);
     free(j);
@@ -309,20 +312,47 @@ int main(void) {
         free(copy);
     }
 
-    /* 4. concurrent proofs: host calls may overlap */
-    uint64_t fs[8];
-    for (int i = 0; i < 8; i++) CHECK(gematik_zero_call_async(signer, M_CREATE_PROOF, (acme_bytes){req.b, req.n}, &fs[i]) == ACME_OK, "async %d", i);
-    for (int i = 0; i < 8; i++) {
-        for (int k = 0; k < 5000 && gematik_zero_future_poll(fs[i]) == ACME_PENDING; k++) usleep(1000);
+    /* 4. concurrency: 64 operations at once, each doing its own host calls
+     *    (public-key + sign), replies arriving out of order from many app
+     *    threads. Every result must belong to its own request: the proof names
+     *    its own URL and is signed over exactly its own content; every 4th call
+     *    uses an unknown key and must get exactly that error. */
+    enum { PAR = 64 };
+    uint64_t fs[PAR];
+    uint64_t stranger = new_signer("no-such-key-parallel");
+    for (int i = 0; i < PAR; i++) {
+        buf r = {.n = 0};
+        char url[64];
+        snprintf(url, sizeof url, "https://zero.example/r/%d", i);
+        put_u8(&r, 0x94); put_str(&r, "POST"); put_str(&r, url); put_u8(&r, 0xc0); put_u8(&r, 0xc0);
+        CHECK(gematik_zero_call_async(i % 4 == 3 ? stranger : signer, M_CREATE_PROOF, (acme_bytes){r.b, r.n}, &fs[i]) == ACME_OK,
+              "async %d", i);
+    }
+    int matched = 0;
+    for (int i = 0; i < PAR; i++) {
+        for (int k = 0; k < 10000 && gematik_zero_future_poll(fs[i]) == ACME_PENDING; k++) usleep(1000);
         acme_buffer out;
         CHECK(gematik_zero_future_take(fs[i], &out) == ACME_OK, "concurrent take %d", i);
         buf b = {.n = 0};
         put(&b, out.ptr, out.len);
         gematik_zero_buffer_free(out);
         char *j = result_string(&b, &tag);
-        CHECK(j && verify_jws(j), "concurrent proof %d verifies", i);
+        if (i % 4 == 3) {
+            CHECK(!j && tag == ZERO_KEY_NOT_FOUND, "call %d (unknown key) got its own error (tag %d)", i, tag);
+        } else if (j) {
+            char *copy = strdup(j), want[80];
+            snprintf(want, sizeof want, "\"htu\":\"https://zero.example/r/%d\"", i);
+            int ok = verify_jws(copy) && strstr(jwt_part(copy, 1), want) != NULL;
+            CHECK(ok, "call %d got its own, correctly signed proof", i);
+            matched += ok;
+            free(copy);
+        } else {
+            CHECK(0, "call %d failed (tag %d)", i, tag);
+        }
         gematik_zero_future_drop(fs[i]);
     }
+    CHECK(matched == PAR - PAR / 4, "%d of %d parallel proofs matched their request", matched, PAR - PAR / 4);
+    gematik_zero_object_drop(stranger);
 
     /* 5. the app's domain error travels back to the caller */
     uint64_t unknown = new_signer("no-such-key");
