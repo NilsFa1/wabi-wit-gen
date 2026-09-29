@@ -121,4 +121,32 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      Experiment: the same core as a shared library for Android / iOS with Gluon
+      Substrate + Gluon's GraalVM (see build-mobile.sh). Not part of the normal build.
+        mvn -Pmobile package gluonfx:sharedlib -Dgluonfx.target=android|ios
+    -->
+    <profile>
+      <id>mobile</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.gluonhq</groupId>
+            <artifactId>gluonfx-maven-plugin</artifactId>
+            <version>1.0.29</version>
+            <configuration>
+              <!-- no main method is run: the library is entered through the @CEntryPoint functions -->
+              <mainClass>acme.core.runtime.NativeExports</mainClass>
+              <nativeImageArgs>
+                <arg>-H:+ReportExceptionStackTraces</arg>
+                <arg>--enable-url-protocols=http</arg>
+              </nativeImageArgs>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
