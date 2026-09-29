@@ -27,7 +27,8 @@ public record CoreInfo(int abiVersion, long capabilities, String contractId, Str
             throw new AcmeIncompatibleLibraryException("native core '" + description + "' implements ABI "
                     + abiMajor() + "." + abiMinor() + ", this SDK needs " + AbiConstants.ABI_MAJOR + "." + AbiConstants.ABI_MINOR + "+");
         }
-        long missing = REQUIRED & ~capabilities;
+        long required = REQUIRED | (AbiConstants.REQUIRES_HOST_CALLS ? AbiConstants.ACME_CAP_HOST_CALLS : 0);
+        long missing = required & ~capabilities;
         if (missing != 0) {
             throw new AcmeIncompatibleLibraryException("native core '" + description
                     + "' lacks capabilities 0x" + Long.toHexString(missing));

@@ -124,9 +124,6 @@ fn main() -> Result<()> {
         if !cfg.has(lang) {
             continue;
         }
-        if lang == "swift" && model.needs_host_calls() {
-            bail!("target swift: host calls (WIT imports) are not implemented for Swift yet");
-        }
         for (name, text) in emit(&model) {
             outputs.push((root.join("generated").join(lang).join(name), text));
         }

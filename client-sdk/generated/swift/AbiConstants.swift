@@ -27,6 +27,7 @@ enum MethodIds {
 public enum AcmeAbi {
     public static let major: UInt32 = 1
     public static let minor: UInt32 = 0 // minimum this package needs
+    public static let requiresHostCalls = false
     public static let ok: Int32 = 0
     public static let pending: Int32 = 1
     public static let ready: Int32 = 2

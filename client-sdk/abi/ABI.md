@@ -1,4 +1,6 @@
-# Acme Native ABI v1.0 — Spezifikation
+# Acme Native ABI v1.1 — Spezifikation
+
+> 1.1 ergänzt optionale Host-Calls (§4a). Alles aus 1.0 gilt unverändert.
 
 Normative Beschreibung von [`acme_abi.h`](acme_abi.h) (Typen, Konstanten) und
 [`acme_abi_functions.h`](acme_abi_functions.h) (die 17 Funktionen). Die ABI ist das
@@ -190,6 +192,49 @@ wertvoller.
 | Swift | `async throws -> T` | `withTaskCancellationHandler { … } onCancel: { acme_future_cancel }`; `Task.checkCancellation()` vor dem Start |
 | Python | `Awaitable[T]` | `asyncio.Future` + `loop.call_soon_threadsafe` im Callback |
 | JS (Node) | `Promise<T>` | `AbortSignal` → `acme_future_cancel`; Callback via `napi_threadsafe_function` |
+
+## 4a. Host-Calls (ABI 1.1): der Core ruft die App
+
+Importiert eine WIT-Welt ein Interface (`import host-keys;`), implementiert
+**die App** dessen Funktionen und der Core ruft sie auf, z. B. „signiere mit dem
+Schlüssel im Secure Enclave / Android Keystore“. Dafür gibt es zwei **optionale**
+Funktionen und das Capability-Bit `ACME_CAP_HOST_CALLS`; Pakete ohne Imports
+brauchen weiterhin nur ABI 1.0.
+
+```c
+typedef void (*acme_host_handler)(void *user_data, uint32_t method_id,
+                                  const uint8_t *request, size_t request_len, uint64_t call);
+acme_status <prefix>_host_register(acme_host_handler handler, void *user_data); /* NULL: abmelden */
+acme_status <prefix>_host_reply(uint64_t call, acme_status status, acme_bytes response);
+```
+
+1. **Method-IDs** der Import-Funktionen stehen wie alle anderen in `abi-ids.lock`
+   (eigene Gruppe pro Interface). `request` sind die Parameter als Array (§5),
+   die Antwort ist der kodierte Rückgabewert (bei `result<T,E>`: `[0, T]` / `[1, E]`).
+2. Der Core MUSS den Handler auf einem **eigenen Thread** aufrufen, nie innerhalb
+   eines ABI-Aufrufs des Hosts (also nur aus async-Arbeit). Mehrere Host-Calls
+   DÜRFEN gleichzeitig offen sein.
+3. Der Handler MUSS schnell zurückkehren. Die App antwortet **später, von einem
+   beliebigen Thread, genau einmal** mit `host_reply`. `request` bleibt bis zu
+   dieser Antwort gültig; der Core kopiert `response`.
+4. `status != ACME_OK` meldet einen Transportfehler (keine Implementierung, App-Bug;
+   `response` = UTF-8-Diagnose). Domänenfehler laufen als `[1, E]` mit `ACME_OK`.
+5. Unbekannte oder bereits beantwortete `call`-IDs → `ACME_ERR_INVALID_HANDLE`.
+6. Bricht der Host die umgebende Operation ab, gibt der Core den Host-Call auf,
+   akzeptiert (und verwirft) die späte Antwort aber trotzdem — erst dann gibt er
+   `request` frei.
+7. Ohne registrierten Handler MUSS die Operation mit einem Fehler enden, nie hängen.
+
+| Sprache | App implementiert | Registrierung | Handler-Mechanik |
+|---|---|---|---|
+| C# | `IHostKeys` (`Task<T>`, Domänenfehler als `ZeroException`) | `ZeroHost.Register(app)` | `[UnmanagedCallersOnly]` → Thread-Pool |
+| Java | `HostKeys` (`CompletionStage<T>`) | `ZeroHost.register(app)` | Panama-Upcall bzw. JNI-Shim → `ForkJoinPool` |
+| Dart/Flutter | `HostKeys` (`Future<T>`, wirft `ZeroError…`) | `ZeroHost.register(app)` | `NativeCallable.listener` → Isolate-Event-Loop |
+| Swift | `HostKeys` (`async throws`) | `ZeroHost.register(hostKeys:)` | `@convention(c)`-Closure → `Task.detached` |
+| Go (Core) | ruft `HostKeysSign(ctx, …)` (generiert) | – | `runtime/go` (`HostCall`) |
+
+Protokolltest (sprachneutral): [`tests/abi/host_calls.c`](../tests/abi/host_calls.c);
+Beispiel-Paket: [`packages/zero`](../packages/zero).
 
 ## 5. Payload-Encoding v1
 

@@ -17,3 +17,5 @@ echo "== rust core: unit + integration tests (incl. real WebSocket)"
 (cd core-rust && cargo test --quiet)
 echo "== compatibility matrix"
 tests/compatibility/run.sh
+echo "== gematik:zero PoC: host calls from every SDK"
+packages/zero/run-tests.sh

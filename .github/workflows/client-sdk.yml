@@ -27,6 +27,8 @@ jobs:
       - uses: dart-lang/setup-dart@v1
       - run: pip install ziglang==0.16.0
       - run: (cd sdk/dart && dart pub get && dart analyze --fatal-infos)
+      - run: (cd packages/zero/sdk/dart && dart pub get && dart analyze --fatal-infos)
+      - run: sudo apt-get install -y libssl-dev # tests/abi/host_calls.c uses OpenSSL as the app keystore
       - run: scripts/test-all.sh
 
   swift-macos:
@@ -43,6 +45,15 @@ jobs:
           swift build -Xlinker -L$LIB
           DYLD_LIBRARY_PATH=$LIB swift test -Xlinker -L$LIB
           DYLD_LIBRARY_PATH=$LIB swift run -Xlinker -L$LIB AcmeExample
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - name: gematik:zero host calls from Swift (Security framework as keystore)
+        run: |
+          LIB=$GITHUB_WORKSPACE/client-sdk/build/zero
+          mkdir -p $LIB
+          (cd packages/zero/core-go && go build -buildmode=c-shared -o $LIB/libgematik_zero.dylib .)
+          cd packages/zero/sdk/swift
+          DYLD_LIBRARY_PATH=$LIB swift test -Xlinker -L$LIB
 
   native-artifacts:
     runs-on: ubuntu-24.04

@@ -62,14 +62,32 @@ final class PanamaAbi implements AbiCalls {
     }
 
     private static final MemorySegment ON_READY;
+    /** void (*acme_host_handler)(void*, uint32_t, const uint8_t*, size_t, uint64_t) — ABI 1.1 */
+    private static final FunctionDescriptor HOST_HANDLER = FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT, ADDRESS, JAVA_LONG, JAVA_LONG);
+    private static final MemorySegment ON_HOST_CALL;
 
     static {
         try {
-            var target = MethodHandles.lookup().findStatic(PanamaAbi.class, "onReady",
+            var lookup = MethodHandles.lookup();
+            var target = lookup.findStatic(PanamaAbi.class, "onReady",
                     MethodType.methodType(void.class, MemorySegment.class, long.class));
             ON_READY = Linker.nativeLinker().upcallStub(target, NativeAbi.CALLBACK, Arena.global());
+            var host = lookup.findStatic(PanamaAbi.class, "onHostCall",
+                    MethodType.methodType(void.class, MemorySegment.class, int.class, MemorySegment.class, long.class, long.class));
+            ON_HOST_CALL = Linker.nativeLinker().upcallStub(host, HOST_HANDLER, Arena.global());
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
+        }
+    }
+
+    /** Host-call upcall from a core thread: copy the request, hand off, return. */
+    @SuppressWarnings("unused")
+    private static void onHostCall(MemorySegment userData, int methodId, MemorySegment request, long length, long call) {
+        try {
+            byte[] bytes = length == 0 ? new byte[0] : request.reinterpret(length).toArray(JAVA_BYTE);
+            HostCalls.onHostCall(methodId, bytes, call);
+        } catch (Throwable ignored) {
+            // never unwind into the core
         }
     }
 
@@ -193,5 +211,18 @@ final class PanamaAbi implements AbiCalls {
     @Override
     public int streamDrop(long stream) {
         return abi.acme_stream_drop(stream);
+    }
+
+    @Override
+    public int hostRegister(boolean install) {
+        if (!abi.hasHostCalls()) return AbiConstants.ACME_ERR_UNSUPPORTED;
+        return abi.acme_host_register(install ? ON_HOST_CALL : MemorySegment.NULL, MemorySegment.NULL);
+    }
+
+    @Override
+    public int hostReply(long call, int status, byte[] response) {
+        try (var arena = Arena.ofConfined()) {
+            return abi.acme_host_reply(call, status, bytes(arena, response));
+        }
     }
 }

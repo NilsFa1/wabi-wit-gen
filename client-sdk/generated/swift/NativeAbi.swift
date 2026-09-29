@@ -20,3 +20,5 @@ import CAcmeClient
 @inline(__always) func acme_stream_next(_ stream: UInt64, _ outFuture: UnsafeMutablePointer<UInt64>?) -> acme_status { acme_client_stream_next(stream, outFuture) }
 @inline(__always) func acme_stream_cancel(_ stream: UInt64) -> acme_status { acme_client_stream_cancel(stream) }
 @inline(__always) func acme_stream_drop(_ stream: UInt64) -> acme_status { acme_client_stream_drop(stream) }
+@inline(__always) func acme_host_register(_ handler: acme_host_handler!, _ userData: UnsafeMutableRawPointer?) -> acme_status { AcmeAbi.errUnsupported }
+@inline(__always) func acme_host_reply(_ call: UInt64, _ status: acme_status, _ response: acme_bytes) -> acme_status { AcmeAbi.errUnsupported }

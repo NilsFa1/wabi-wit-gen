@@ -16,6 +16,9 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
     for r in &m.resources {
         files.push((format!("{}.swift", crate::gen_csharp::class_name(m, r)), resource(m, r)));
     }
+    if m.needs_host_calls() {
+        files.push((format!("{}.swift", host_class(m)), host(m)));
+    }
     files
 }
 
@@ -303,12 +306,18 @@ fn constants(m: &Model) -> String {
             w!(o, "    static let {}{}: UInt32 = {:#06x}", camel(&r.name), pascal(&f.name), f.id);
         }
     }
+    for h in &m.imports {
+        for f in &h.funcs {
+            w!(o, "    static let {}{}: UInt32 = {:#06x} // import, answered by the app", camel(&h.name), pascal(&f.name), f.id);
+        }
+    }
     w!(o, "}}");
     w!(o, "");
     w!(o, "/// ABI {}.{} status codes and capability bits (mirrors abi/acme_abi.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
     w!(o, "public enum AcmeAbi {{");
     w!(o, "    public static let major: UInt32 = {}", abi_table::ABI_MAJOR);
     w!(o, "    public static let minor: UInt32 = {} // minimum this package needs", m.required_abi_minor());
+    w!(o, "    public static let requiresHostCalls = {}", m.needs_host_calls());
     for (n, v) in abi_table::STATUSES {
         w!(o, "    public static let {}: Int32 = {v}", camel(&n.to_ascii_lowercase().replace('_', "-")));
     }
@@ -344,13 +353,125 @@ fn native_abi(m: &Model) -> String {
     w!(o, "import CAcmeClient");
     w!(o, "");
     w!(o, "// Symbol prefix of package {}: `{}_`.", m.contract_id(), m.symbol_prefix());
-    // Host calls (ABI 1.1) are not supported by the Swift runtime yet.
-    for f in abi_table::FUNCTIONS.iter().filter(|f| !f.host_call) {
+    for f in abi_table::FUNCTIONS {
         let ps: Vec<String> = f.params.iter().map(|(t, n)| format!("_ {n}: {}", swift_c(*t))).collect();
         let args: Vec<&str> = f.params.iter().map(|(_, n)| *n).collect();
         let ret = if f.ret == abi_table::CTy::Void { String::new() } else { format!(" -> {}", swift_c(f.ret)) };
-        w!(o, "@inline(__always) func {}({}){ret} {{ {}({}) }}", f.name, ps.join(", "), abi_table::symbol(&m.symbol_prefix(), f.name), args.join(", "));
+        if f.host_call && !m.needs_host_calls() {
+            // ABI 1.1 host calls: this package has no WIT imports, so its core need not export them.
+            w!(o, "@inline(__always) func {}({}){ret} {{ AcmeAbi.errUnsupported }}", f.name, ps.join(", "));
+        } else {
+            w!(o, "@inline(__always) func {}({}){ret} {{ {}({}) }}", f.name, ps.join(", "), abi_table::symbol(&m.symbol_prefix(), f.name), args.join(", "));
+        }
     }
+    o
+}
+
+/// `gematik:zero` -> `ZeroHost`: registers the app's implementations of the imports.
+fn host_class(m: &Model) -> String {
+    format!("{}Host", pascal(&m.package))
+}
+
+/// App-side host calls (ABI 1.1): one protocol per imported WIT interface,
+/// plus `<Package>Host.register(...)` which decodes requests and encodes answers.
+fn host(m: &Model) -> String {
+    let cls = host_class(m);
+    let mut o = header();
+    for h in &m.imports {
+        docs(&mut o, &h.docs, "");
+        w!(o, "///");
+        w!(o, "/// WIT import `{}`: implemented by the APP, called by the core. Domain", h.name);
+        w!(o, "/// errors are reported by throwing the generated error type.");
+        w!(o, "public protocol {}: Sendable {{", pascal(&h.name));
+        for f in &h.funcs {
+            docs(&mut o, &f.docs, "    ");
+            let ps: Vec<String> = f.params.iter().map(|(n, t)| format!("{}: {}", ident(n), st(t))).collect();
+            let ret = match &f.ret {
+                Ret::Unit | Ret::Result { ok: None, .. } => String::new(),
+                Ret::Value(t) | Ret::Result { ok: Some(t), .. } => format!(" -> {}", st(t)),
+            };
+            w!(o, "    func {}({}) async throws{ret}", ident(&f.name), ps.join(", "));
+        }
+        w!(o, "}}");
+        w!(o, "");
+    }
+    let params: Vec<String> = m.imports.iter().map(|h| format!("{}: {}", ident(&h.name), pascal(&h.name))).collect();
+    let args: Vec<String> = m.imports.iter().map(|h| ident(&h.name)).collect();
+    w!(o, "/// Connects the app's implementations of the WIT imports of {} to the core.", m.contract_id());
+    w!(o, "public enum {cls} {{");
+    w!(o, "    /// Call once at startup, before the core needs the app (process-wide).");
+    w!(o, "    public static func register({}) throws {{", params.join(", "));
+    w!(o, "        try HostCalls.install {{ methodId, request in");
+    w!(o, "            try await dispatch({}, methodId, request)", args.iter().map(|a| format!("{a}: {a}")).collect::<Vec<_>>().join(", "));
+    w!(o, "        }}");
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    /// Removes the registration.");
+    w!(o, "    public static func unregister() {{");
+    w!(o, "        HostCalls.uninstall()");
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    private static func dispatch({}, _ methodId: UInt32, _ request: [UInt8]) async throws -> [UInt8] {{", params.join(", "));
+    w!(o, "        let r = MsgPackReader(request)");
+    w!(o, "        var w = MsgPackWriter()");
+    w!(o, "        switch methodId {{");
+    for h in &m.imports {
+        let target = ident(&h.name);
+        for f in &h.funcs {
+            w!(o, "        case MethodIds.{}{}:", camel(&h.name), pascal(&f.name));
+            w!(o, "            try r.readTupleHeader({})", f.params.len());
+            for (n, t) in &f.params {
+                w!(o, "            let {} = {}", ident(n), dec(t, "r", 1));
+            }
+            w!(o, "            guard r.remaining == 0 else {{ throw AcmeRuntimeError.protocolError(\"trailing bytes in host call request\") }}");
+            let a: Vec<String> = f.params.iter().map(|(n, _)| format!("{}: {}", ident(n), ident(n))).collect();
+            let call = format!("try await {target}.{}({})", ident(&f.name), a.join(", "));
+            match &f.ret {
+                Ret::Unit => {
+                    w!(o, "            {call}");
+                    w!(o, "            w.writeNil()");
+                }
+                Ret::Value(t) => {
+                    w!(o, "            let ret = {call}");
+                    w!(o, "            {}", enc(t, "ret", 1));
+                }
+                Ret::Result { ok, err } => {
+                    w!(o, "            do {{");
+                    match ok {
+                        Some(t) => {
+                            w!(o, "                let ret = {call}");
+                            w!(o, "                w.writeArrayHeader(2); w.writeUInt(0)");
+                            w!(o, "                {}", enc(t, "ret", 1));
+                        }
+                        None => {
+                            w!(o, "                {call}");
+                            w!(o, "                w.writeArrayHeader(2); w.writeUInt(0); w.writeNil()");
+                        }
+                    }
+                    match err {
+                        Some(Ty::Named(n)) => {
+                            w!(o, "            }} catch let e as {} {{", pascal(n));
+                            w!(o, "                w = MsgPackWriter()");
+                            w!(o, "                w.writeArrayHeader(2); w.writeUInt(1)");
+                            w!(o, "                e.encode(to: w)");
+                        }
+                        _ => {
+                            w!(o, "            }} catch AcmeRuntimeError.callFailed {{");
+                            w!(o, "                w = MsgPackWriter()");
+                            w!(o, "                w.writeArrayHeader(2); w.writeUInt(1); w.writeNil()");
+                        }
+                    }
+                    w!(o, "            }}");
+                }
+            }
+        }
+    }
+    w!(o, "        default:");
+    w!(o, "            throw AcmeRuntimeError.native(status: AcmeAbi.errUnknownMethod, message: \"unknown host method \\(methodId)\")");
+    w!(o, "        }}");
+    w!(o, "        return w.bytes");
+    w!(o, "    }}");
+    w!(o, "}}");
     o
 }
 

@@ -63,6 +63,11 @@ public final class NativeAbi {
         acme_host_reply = lookup.find("acme_client_host_reply").map(s -> linker.downcallHandle(s, FunctionDescriptor.of(JAVA_INT, JAVA_LONG, JAVA_INT, ACME_BYTES))).orElse(null);
     }
 
+    /** ABI 1.1: true if the core exports the (optional) host-call functions. */
+    public boolean hasHostCalls() {
+        return acme_host_register != null && acme_host_reply != null;
+    }
+
     private static MemorySegment find(SymbolLookup lookup, String name) {
         return lookup.find(name).orElseThrow(() -> new AcmeIncompatibleLibraryException("native core lacks symbol " + name));
     }

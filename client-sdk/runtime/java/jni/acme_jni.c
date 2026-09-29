@@ -66,6 +66,9 @@ typedef struct {
     acme_status (*stream_next)(acme_stream_handle, acme_future_handle *);
     acme_status (*stream_cancel)(acme_stream_handle);
     acme_status (*stream_drop)(acme_stream_handle);
+    /* ABI 1.1, optional (ACME_CAP_HOST_CALLS): NULL if the core has no host calls */
+    acme_status (*host_register)(acme_host_handler, void *);
+    acme_status (*host_reply)(uint64_t, acme_status, acme_bytes);
 } acme_lib;
 
 #define L(lib) ((acme_lib *)(intptr_t)(lib))
@@ -75,6 +78,7 @@ typedef struct {
 static JavaVM *g_vm;
 static jclass g_cls;          /* com.acme.client.runtime.JniAbi (global ref) */
 static jmethodID g_on_ready;  /* static void onReady(long key) */
+static jmethodID g_on_host_call; /* static void onHostCall(int methodId, byte[] request, long call) */
 
 #ifndef _WIN32
 static pthread_key_t g_attached;
@@ -95,31 +99,61 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     g_cls = (jclass)(*env)->NewGlobalRef(env, cls);
     g_on_ready = (*env)->GetStaticMethodID(env, g_cls, "onReady", "(J)V");
     if (g_on_ready == NULL) return JNI_ERR;
+    g_on_host_call = (*env)->GetStaticMethodID(env, g_cls, "onHostCall", "(I[BJ)V");
+    if (g_on_host_call == NULL) return JNI_ERR;
 #ifndef _WIN32
     pthread_key_create(&g_attached, detach_at_thread_exit);
 #endif
     return JNI_VERSION_1_6;
 }
 
-/* The completion callback handed to the core. Runs on a core thread; returns quickly. */
-static void on_ready(void *user_data, acme_future_handle future) {
-    (void)future;
+/* JNIEnv of the current (core) thread; attaches it once as daemon. */
+static JNIEnv *attach(int *attached_now) {
     JNIEnv *env = NULL;
-    int attached_now = 0;
+    *attached_now = 0;
     if ((*g_vm)->GetEnv(g_vm, (void **)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if ((*g_vm)->AttachCurrentThreadAsDaemon(g_vm, (attach_env_t *)&env, NULL) != JNI_OK) return;
-        attached_now = 1;
+        if ((*g_vm)->AttachCurrentThreadAsDaemon(g_vm, (attach_env_t *)&env, NULL) != JNI_OK) return NULL;
+        *attached_now = 1;
 #ifndef _WIN32
         pthread_setspecific(g_attached, (void *)1);
 #endif
     }
-    (*env)->CallStaticVoidMethod(env, g_cls, g_on_ready, (jlong)(intptr_t)user_data);
+    return env;
+}
+
+static void release(JNIEnv *env, int attached_now) {
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env); /* never unwind into the core */
 #ifdef _WIN32
     if (attached_now) (*g_vm)->DetachCurrentThread(g_vm);
 #else
     (void)attached_now;
 #endif
+}
+
+/* The completion callback handed to the core. Runs on a core thread; returns quickly. */
+static void on_ready(void *user_data, acme_future_handle future) {
+    (void)future;
+    int attached_now;
+    JNIEnv *env = attach(&attached_now);
+    if (!env) return;
+    (*env)->CallStaticVoidMethod(env, g_cls, g_on_ready, (jlong)(intptr_t)user_data);
+    release(env, attached_now);
+}
+
+/* ABI 1.1 host-call handler: copies the request into a byte[] and hands it to
+ * Java, which answers later through nHostReply (request stays valid until then). */
+static void on_host_call(void *user_data, uint32_t method_id, const uint8_t *request, size_t len, uint64_t call) {
+    (void)user_data;
+    int attached_now;
+    JNIEnv *env = attach(&attached_now);
+    if (!env) return;
+    jbyteArray arr = (*env)->NewByteArray(env, (jsize)len);
+    if (arr != NULL) {
+        if (len > 0) (*env)->SetByteArrayRegion(env, arr, 0, (jsize)len, (const jbyte *)request);
+        (*env)->CallStaticVoidMethod(env, g_cls, g_on_host_call, (jint)method_id, arr, (jlong)call);
+        (*env)->DeleteLocalRef(env, arr);
+    }
+    release(env, attached_now);
 }
 
 static void set_status(JNIEnv *env, jintArray out, acme_status st) {
@@ -202,6 +236,11 @@ JNI_FN(jlong, nOpen)(JNIEnv *env, jclass c, jstring jpath, jstring jprefix, jboo
         SYM(stream_next, "stream_next")
         SYM(stream_cancel, "stream_cancel")
         SYM(stream_drop, "stream_drop")
+        /* optional (ABI 1.1): stay NULL for cores without host calls */
+        snprintf(sym, sizeof sym, "%shost_register", prefix);
+        *(void **)&lib->host_register = LIB_SYM(lib->handle, sym);
+        snprintf(sym, sizeof sym, "%shost_reply", prefix);
+        *(void **)&lib->host_reply = LIB_SYM(lib->handle, sym);
     }
 #undef SYM
     (*env)->ReleaseStringUTFChars(env, jpath, path);
@@ -277,3 +316,18 @@ JNI_FN(jlong, nStreamNext)(JNIEnv *env, jclass c, jlong lib, jlong stream, jintA
 
 JNI_FN(jint, nStreamCancel)(JNIEnv *env, jclass c, jlong lib, jlong s) { (void)env; (void)c; return L(lib)->stream_cancel((uint64_t)s); }
 JNI_FN(jint, nStreamDrop)(JNIEnv *env, jclass c, jlong lib, jlong s) { (void)env; (void)c; return L(lib)->stream_drop((uint64_t)s); }
+
+JNI_FN(jint, nHostRegister)(JNIEnv *env, jclass c, jlong lib, jboolean install) {
+    (void)env; (void)c;
+    if (!L(lib)->host_register || !L(lib)->host_reply) return ACME_ERR_UNSUPPORTED;
+    return L(lib)->host_register(install ? on_host_call : NULL, NULL);
+}
+
+JNI_FN(jint, nHostReply)(JNIEnv *env, jclass c, jlong lib, jlong call, jint status, jbyteArray response) {
+    (void)c;
+    if (!L(lib)->host_reply) return ACME_ERR_UNSUPPORTED;
+    borrowed b = borrow(env, response); /* the core copies the response */
+    acme_status st = L(lib)->host_reply((uint64_t)call, (acme_status)status, b.bytes);
+    unborrow(env, &b);
+    return st;
+}

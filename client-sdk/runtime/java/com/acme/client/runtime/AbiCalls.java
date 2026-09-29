@@ -45,4 +45,14 @@ interface AbiCalls {
     int streamCancel(long stream);
 
     int streamDrop(long stream);
+
+    /**
+     * ABI 1.1: installs (or removes) the binding's native host handler, which
+     * forwards every host call to {@link HostCalls#onHostCall}. Returns
+     * ACME_ERR_UNSUPPORTED if the core lacks the host-call symbols.
+     */
+    int hostRegister(boolean install);
+
+    /** ABI 1.1: answers a host call (exactly once per call). */
+    int hostReply(long call, int status, byte[] response);
 }

@@ -72,6 +72,16 @@ final class JniAbi implements AbiCalls {
         }
     }
 
+    /** Host call (ABI 1.1), called by the shim from a core thread with a copy of the request. */
+    @SuppressWarnings("unused")
+    private static void onHostCall(int methodId, byte[] request, long call) {
+        try {
+            HostCalls.onHostCall(methodId, request, call);
+        } catch (Throwable ignored) {
+            // the shim clears pending exceptions anyway
+        }
+    }
+
     private final long lib;
     private final CoreInfo info;
 
@@ -148,6 +158,16 @@ final class JniAbi implements AbiCalls {
         return nStreamDrop(lib, stream);
     }
 
+    @Override
+    public int hostRegister(boolean install) {
+        return nHostRegister(lib, install);
+    }
+
+    @Override
+    public int hostReply(long call, int status, byte[] response) {
+        return nHostReply(lib, call, status, response);
+    }
+
     // ----------------------------------------------------------- natives
     // `lib` is an opaque pointer to the shim's function table for one core.
 
@@ -169,4 +189,7 @@ final class JniAbi implements AbiCalls {
     static native long nStreamNext(long lib, long stream, int[] status);
     static native int nStreamCancel(long lib, long stream);
     static native int nStreamDrop(long lib, long stream);
+    /** ABI 1.1 (optional symbols): ACME_ERR_UNSUPPORTED if the core has no host calls. */
+    static native int nHostRegister(long lib, boolean install);
+    static native int nHostReply(long lib, long call, int status, byte[] response);
 }

@@ -23,7 +23,8 @@ public struct CoreInfo: Sendable, CustomStringConvertible {
         guard abiMajor == AcmeAbi.major, abiMinor >= AcmeAbi.minor else {
             throw AcmeRuntimeError.incompatibleLibrary("core '\(coreDescription)' implements ABI \(abiMajor).\(abiMinor), SDK needs \(AcmeAbi.major).\(AcmeAbi.minor)+")
         }
-        guard capabilities & CoreInfo.required == CoreInfo.required else {
+        let needed = CoreInfo.required | (AcmeAbi.requiresHostCalls ? AcmeAbi.capHostCalls : 0)
+        guard capabilities & needed == needed else {
             throw AcmeRuntimeError.incompatibleLibrary("core '\(coreDescription)' lacks required capabilities")
         }
         let parts = contractId.split(separator: "@", maxSplits: 1)

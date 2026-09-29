@@ -29,6 +29,12 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
     for r in &m.resources {
         files.push((format!("{dir}/{}.java", class_name(m, r)), resource(m, r)));
     }
+    for h in &m.imports {
+        files.push((format!("{dir}/{}.java", pascal(&h.name)), host_interface(m, h)));
+    }
+    if m.needs_host_calls() {
+        files.push((format!("{dir}/{}.java", host_class(m)), host(m)));
+    }
     files.push((format!("{RT_DIR}/NativeAbi.java"), native_abi(m)));
     files.push((format!("{RT_DIR}/AbiConstants.java"), abi_constants(m)));
     files.push((format!("{RT_DIR}/Contract.java"), contract(m)));
@@ -351,6 +357,11 @@ fn method_ids(m: &Model) -> String {
             w!(o, "    static final int {}_{} = {:#06x};", screaming(&r.name), screaming(&f.name), f.id);
         }
     }
+    for h in &m.imports {
+        for f in &h.funcs {
+            w!(o, "    static final int {}_{} = {:#06x}; // import, answered by the app", screaming(&h.name), screaming(&f.name), f.id);
+        }
+    }
     w!(o, "}}");
     o
 }
@@ -582,6 +593,11 @@ fn native_abi(m: &Model) -> String {
     }
     w!(o, "    }}");
     w!(o, "");
+    w!(o, "    /** ABI 1.1: true if the core exports the (optional) host-call functions. */");
+    w!(o, "    public boolean hasHostCalls() {{");
+    w!(o, "        return acme_host_register != null && acme_host_reply != null;");
+    w!(o, "    }}");
+    w!(o, "");
     w!(o, "    private static MemorySegment find(SymbolLookup lookup, String name) {{");
     w!(o, "        return lookup.find(name).orElseThrow(() -> new AcmeIncompatibleLibraryException(\"native core lacks symbol \" + name));");
     w!(o, "    }}");
@@ -611,6 +627,160 @@ fn native_abi(m: &Model) -> String {
         w!(o, "        }}");
         w!(o, "    }}");
     }
+    w!(o, "}}");
+    o
+}
+
+/// `gematik:zero` -> `ZeroHost`: registers the app's implementations of the imports.
+fn host_class(m: &Model) -> String {
+    format!("{}Host", pascal(&m.package))
+}
+
+fn host_ret(r: &Ret) -> String {
+    match r {
+        Ret::Unit | Ret::Result { ok: None, .. } => "java.util.concurrent.CompletionStage<Void>".into(),
+        Ret::Value(t) | Ret::Result { ok: Some(t), .. } => format!("java.util.concurrent.CompletionStage<{}>", boxed(t)),
+    }
+}
+
+/// One interface per imported WIT interface: implemented by the APP.
+fn host_interface(m: &Model, h: &HostInterface) -> String {
+    let mut o = header(&pkg(m));
+    docs(&mut o, &h.docs, "");
+    w!(o, "// WIT import `{}`: implemented by the APP, called by the core (answers may", h.name);
+    w!(o, "// complete later, on any thread). Domain errors: throw or complete exceptionally");
+    w!(o, "// with the generated exception.");
+    w!(o, "public interface {} {{", pascal(&h.name));
+    for f in &h.funcs {
+        docs(&mut o, &f.docs, "    ");
+        let ps: Vec<String> = f.params.iter().map(|(n, t)| format!("{} {}", jt(t), ident(n))).collect();
+        w!(o, "    {} {}({});", host_ret(&f.ret), ident(&f.name), ps.join(", "));
+    }
+    w!(o, "}}");
+    o
+}
+
+/// `<Package>Host.register(...)`: decodes host-call requests, calls the app,
+/// encodes its answers (ABI 1.1 host calls).
+fn host(m: &Model) -> String {
+    let cls = host_class(m);
+    let mut o = header(&pkg(m));
+    w!(o, "import com.acme.client.runtime.AbiConstants;");
+    w!(o, "import com.acme.client.runtime.AcmeNativeException;");
+    w!(o, "import com.acme.client.runtime.AcmeProtocolException;");
+    w!(o, "import com.acme.client.runtime.HostCalls;");
+    w!(o, "import com.acme.client.runtime.MsgPackReader;");
+    w!(o, "import com.acme.client.runtime.MsgPackWriter;");
+    w!(o, "import com.acme.client.runtime.NativeBackend;");
+    w!(o, "import java.util.Objects;");
+    w!(o, "import java.util.concurrent.CompletableFuture;");
+    w!(o, "import java.util.concurrent.CompletionException;");
+    w!(o, "import java.util.concurrent.CompletionStage;");
+    w!(o, "import java.util.function.Supplier;");
+    w!(o, "");
+    let params: Vec<String> = m.imports.iter().map(|h| format!("{} {}", pascal(&h.name), ident(&h.name))).collect();
+    let args: Vec<String> = m.imports.iter().map(|h| ident(&h.name)).collect();
+    w!(o, "/** Connects the app's implementations of the WIT imports of {} to the core. */", m.contract_id());
+    w!(o, "public final class {cls} {{");
+    w!(o, "    private {cls}() {{}}");
+    w!(o, "");
+    w!(o, "    /** Call once at startup, before the core needs the app (process-wide). */");
+    w!(o, "    public static void register({}) {{", params.join(", "));
+    w!(o, "        register(NativeBackend.shared(), {});", args.join(", "));
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    public static void register(NativeBackend backend, {}) {{", params.join(", "));
+    for a in &args {
+        w!(o, "        Objects.requireNonNull({a}, \"{a}\");");
+    }
+    w!(o, "        HostCalls.install(backend, (methodId, request) -> dispatch({}, methodId, request));", args.join(", "));
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    /** Removes the registration. */");
+    w!(o, "    public static void unregister() {{");
+    w!(o, "        HostCalls.uninstall(NativeBackend.shared());");
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    /** The app may throw synchronously or return a failed stage: both count. */");
+    w!(o, "    private static <T> CompletionStage<T> call(Supplier<CompletionStage<T>> body) {{");
+    w!(o, "        try {{");
+    w!(o, "            return Objects.requireNonNull(body.get(), \"host implementation returned null\");");
+    w!(o, "        }} catch (RuntimeException e) {{");
+    w!(o, "            return CompletableFuture.failedFuture(e);");
+    w!(o, "        }}");
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    private static Throwable unwrap(Throwable t) {{");
+    w!(o, "        while (t instanceof CompletionException && t.getCause() != null) t = t.getCause();");
+    w!(o, "        return t;");
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    private static CompletionStage<byte[]> dispatch({}, int methodId, byte[] request) {{", params.join(", "));
+    w!(o, "        var r = new MsgPackReader(request);");
+    w!(o, "        switch (methodId) {{");
+    for h in &m.imports {
+        let target = ident(&h.name);
+        for f in &h.funcs {
+            w!(o, "            case MethodIds.{}_{}: {{", screaming(&h.name), screaming(&f.name));
+            w!(o, "                if (r.readArrayHeader() != {}) throw new AcmeProtocolException(\"{}: wrong parameter count\");", f.params.len(), f.name);
+            for (n, t) in &f.params {
+                w!(o, "                {} {} = {};", jt(t), ident(n), dec(t, "r", 1));
+            }
+            w!(o, "                if (r.remaining() != 0) throw new AcmeProtocolException(\"trailing bytes in host call request\");");
+            let a: Vec<String> = f.params.iter().map(|(n, _)| ident(n)).collect();
+            w!(o, "                return call(() -> {target}.{}({})).handle((ret, failure) -> {{", ident(&f.name), a.join(", "));
+            w!(o, "                    var w = new MsgPackWriter();");
+            match &f.ret {
+                Ret::Unit => {
+                    w!(o, "                    if (failure != null) throw new CompletionException(unwrap(failure));");
+                    w!(o, "                    w.writeNil();");
+                }
+                Ret::Value(t) => {
+                    w!(o, "                    if (failure != null) throw new CompletionException(unwrap(failure));");
+                    w!(o, "                    {}", enc(t, "ret", 1));
+                }
+                Ret::Result { ok, err } => {
+                    w!(o, "                    if (failure == null) {{");
+                    w!(o, "                        w.writeArrayHeader(2);");
+                    w!(o, "                        w.writeUInt(0);");
+                    match ok {
+                        Some(t) => w!(o, "                        {}", enc(t, "ret", 1)),
+                        None => w!(o, "                        w.writeNil();"),
+                    }
+                    w!(o, "                        return w.toByteArray();");
+                    w!(o, "                    }}");
+                    w!(o, "                    Throwable cause = unwrap(failure);");
+                    match err {
+                        Some(Ty::Named(n)) => {
+                            w!(o, "                    if (!(cause instanceof {} e)) throw new CompletionException(cause);", exception_name(n));
+                            w!(o, "                    w.writeArrayHeader(2);");
+                            w!(o, "                    w.writeUInt(1);");
+                            w!(o, "                    WireCodec.write{}(w, e.error());", pascal(n));
+                        }
+                        Some(t) => {
+                            w!(o, "                    if (!(cause instanceof com.acme.client.runtime.AcmeCallFailedException e) || !(e.error() instanceof {} err)) throw new CompletionException(cause);", boxed(t));
+                            w!(o, "                    w.writeArrayHeader(2);");
+                            w!(o, "                    w.writeUInt(1);");
+                            w!(o, "                    {}", enc(t, "err", 1));
+                        }
+                        None => {
+                            w!(o, "                    if (!(cause instanceof com.acme.client.runtime.AcmeCallFailedException)) throw new CompletionException(cause);");
+                            w!(o, "                    w.writeArrayHeader(2);");
+                            w!(o, "                    w.writeUInt(1);");
+                            w!(o, "                    w.writeNil();");
+                        }
+                    }
+                }
+            }
+            w!(o, "                    return w.toByteArray();");
+            w!(o, "                }});");
+            w!(o, "            }}");
+        }
+    }
+    w!(o, "            default:");
+    w!(o, "                throw new AcmeNativeException(AbiConstants.ACME_ERR_UNKNOWN_METHOD, \"unknown host method\", Integer.toHexString(methodId));");
+    w!(o, "        }}");
+    w!(o, "    }}");
     w!(o, "}}");
     o
 }

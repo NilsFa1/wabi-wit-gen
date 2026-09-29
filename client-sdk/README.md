@@ -47,6 +47,30 @@ Events, Befehlen und langlaufenden Operationen brauchen — der Stub
 implementiert bewusst nur Konstruktor, `state`, `connect`/`disconnect` und
 `get-customer`.
 
+### Host-Calls (ABI 1.1): der Core ruft die App — Beispiel gematik zero-lab
+
+[`packages/zero`](packages/zero) ist ein zweites WIT-Paket (`gematik:zero`):
+Ein **Go-Core mit gematik libzero** erzeugt DPoP-Proofs (RFC 9449), der private
+Schlüssel bleibt aber **in der App** (Secure Enclave, Android Keystore, TPM …).
+Der Core ruft dazu das importierte WIT-Interface `host-keys` auf (ABI.md §4a).
+`packages/zero/run-tests.sh` prüft dieselben Szenarien aus jeder Sprache; jede
+App spielt den Keystore mit ihrer Plattform-Kryptografie und verifiziert die
+Signatur und den libzero-Thumbprint unabhängig:
+
+| App-Sprache | Keystore im Test | Ergebnis |
+|---|---|---|
+| C (Protokolltest, `tests/abi/host_calls.c`) | OpenSSL | ✅ 129 Checks |
+| C# | `System.Security.Cryptography.ECDsa` | ✅ 6/6 |
+| Java Panama | JDK `KeyPairGenerator`/`Signature` | ✅ 6/6 |
+| Java JNI (Android-Pfad) | wie oben | ✅ 6/6 |
+| Dart/Flutter | pointycastle | ✅ 6/6 |
+| Swift | Security-Framework (`SecKey`) | ⏳ nur macOS-CI (keine Swift-Toolchain hier) |
+
+Der Go-Core besteht nur aus Geschäftslogik (`packages/zero/core-go/dpop.go`);
+Typen, Codec, Dispatcher, Host-Call-Stubs (`HostKeysSign(ctx, …)`) und die
+exportierten C-Symbole generiert `acme-wit-gen` (Go-Emitter), das Gleiche gilt
+seit diesem Schritt für `alt-cores/go`.
+
 **Swift** wird generiert und ist vollständig ausgeschrieben (Package,
 Runtime, Tests, Beispiel), konnte in dieser Linux-Umgebung aber **nicht
 kompiliert** werden (keine Swift-Toolchain verfügbar). Der CI-Workflow
@@ -286,7 +310,7 @@ und die Testsuiten, und zwar bis auf die **kompilierten Binaries**. Die
 Matrix lädt dieselbe `Acme.Client.Tests.dll` und dieselbe `acme-client.jar`
 gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
 `core-rust/` (Logik + `src/ffi`-Adapter) durch `alt-cores/go/`
-(Logik + `abi.go`/`dispatch.go`) bzw. `alt-cores/zig/`.
+(Logik `client.go` + generiertes `acme_generated.go` + Runtime `runtime/go`) bzw. `alt-cores/zig/`.
 
 ## Bekannte Grenzen des PoC
 
@@ -294,8 +318,13 @@ gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
 * **Android + Java:** Das JNI-Binding ist implementiert und auf dem Desktop-JVM
   gegen alle Cores getestet; auf einem echten Android-Gerät bzw. Emulator lief
   es noch nicht (kein Android-SDK in dieser Umgebung).
-* **Go-Dispatch ist handgeschrieben:** Der Generator hat heute nur einen
-  Rust-Core-Emitter; ein Go-Emitter würde `dispatch.go` erzeugen.
+* **Host-Calls im Core:** Nur Go-Cores können Host-Calls auslösen (Rust-,
+  Zig- und C#-Core noch nicht; der Generator lehnt Imports beim Rust-Target ab).
+  Host-Calls kennen noch keinen eigenen Abbruch in Richtung App und keine
+  Streams/Ressourcen als Parameter.
+* **libzero:** Genutzt wird bisher nur `util.Jwk` (Thumbprint); das `dpop`-Paket
+  von zero-lab ist in libzero v0.1.0 nicht veröffentlicht, der Proof entsteht
+  deshalb mit jwx (das libzero selbst verwendet).
 * **WIT-Teilmenge:** `future<T>` als *Wert*, Ressourcen-Handles als Parameter,
   statische und freie Funktionen, `flags` und in Java auch Tupel meldet der
   Generator als „nicht unterstützt“. `async func` und `stream<T>` sind voll
