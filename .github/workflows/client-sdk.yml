@@ -24,7 +24,9 @@ jobs:
         with: { distribution: temurin, java-version: "25" }
       - uses: actions/setup-go@v5
         with: { go-version: "1.24" }
+      - uses: dart-lang/setup-dart@v1
       - run: pip install ziglang==0.16.0
+      - run: (cd sdk/dart && dart pub get && dart analyze --fatal-infos)
       - run: scripts/test-all.sh
 
   swift-macos:

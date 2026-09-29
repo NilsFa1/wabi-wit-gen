@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Compatibility matrix: the SAME, unchanged SDK test binaries (C#, Java) and the
+# Compatibility matrix: the SAME, unchanged SDK test binaries (C#, Java), the Dart
+# test suite and the
 # language-neutral C conformance suite run against every core implementation.
 # If this passes, the SDKs depend only on the native ABI — not on Rust.
 #
@@ -32,7 +33,8 @@ gcc -shared -fPIC -o "$B/fake/libfake_abi_v2.so" "$ROOT/tests/compatibility/fake
 gcc -shared -fPIC -o "$B/fake/libfake_contract_v2.so" "$ROOT/tests/compatibility/fake_core.c" '-DFAKE_CONTRACT="acme:client@2.0.0"'
 gcc -shared -fPIC -o "$B/fake/libfake_no_streams.so" "$ROOT/tests/compatibility/fake_core.c" '-DFAKE_CAPS=(ACME_CAP_SYNC_CALLS|ACME_CAP_ASYNC_CALLS)'
 gcc -std=c11 -Wall -Wextra -Werror -O1 -o "$B/conformance" "$ROOT/tests/abi/conformance.c" -ldl -lpthread
-HAVE_DOTNET=0; HAVE_JAVA=0
+HAVE_DOTNET=0; HAVE_JAVA=0; HAVE_DART=0
+DART="$(command -v dart || echo /opt/dart-sdk/bin/dart)"
 if have dotnet; then
   dotnet build "$ROOT/tests/csharp" -nologo -v q -c Release -o "$B/csharp-tests" >/dev/null && HAVE_DOTNET=1
 fi
@@ -40,7 +42,11 @@ if have javac; then
   "$ROOT/sdk/java/build.sh" >/dev/null
   javac --release 22 -cp "$B/java/acme-client.jar" -d "$B/java/tests" "$ROOT/tests/java/AcmeClientTests.java" && HAVE_JAVA=1
 fi
+if [ -x "$DART" ]; then
+  (cd "$ROOT/sdk/dart" && "$DART" pub get >/dev/null) && HAVE_DART=1
+fi
 export ACME_FAKE_CORES_DIR="$B/fake"
+dart_tests() { (cd "$ROOT/sdk/dart" && ACME_NATIVE_LIB="$1" ACME_TEST_PROFILE="$2" "$DART" test -r compact | tail -1); }
 
 declare -a SUMMARY=()
 run() { # name, command...
@@ -59,6 +65,7 @@ for core in ${CORES:-rust go zig}; do
   [ $HAVE_DOTNET = 1 ] && run "$core / C# SDK tests" env ACME_NATIVE_LIB="$lib" dotnet "$B/csharp-tests/Acme.Client.Tests.dll" $flag
   [ $HAVE_JAVA = 1 ] && run "$core / Java SDK tests" env ACME_NATIVE_LIB="$lib" \
       java --enable-native-access=ALL-UNNAMED -cp "$B/java/acme-client.jar:$B/java/tests" AcmeClientTests $flag
+  [ $HAVE_DART = 1 ] && run "$core / Dart SDK tests" dart_tests "$lib" "$prof"
 done
 
 echo; echo "== compatibility matrix"

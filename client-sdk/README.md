@@ -6,12 +6,12 @@ und dessen **Implementierungssprache austauschbar** bleibt.
 ```
                         wit/client.wit                 ← öffentlicher Vertrag
                               │  acme-wit-gen
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-       C# SDK              Java SDK            Swift SDK   ← generiert + generische Runtime
-   Task / IAsyncEnum.  CompletableFuture /   async throws /
-                       Flow.Publisher        AsyncSequence
-          └───────────────────┼───────────────────┘
+      ┌─────────────────┬───────┴─────────┬─────────────────┐
+      ▼                 ▼                 ▼                 ▼
+   C# SDK            Java SDK          Swift SDK        Dart SDK      ← generiert + generische Runtime
+ Task /            CompletableFuture/ async throws /   Future /        (Dart auch für Flutter)
+ IAsyncEnumerable  Flow.Publisher     AsyncSequence    Stream
+      └─────────────────┴───────┬─────────┴─────────────────┘
                               ▼
                  abi/acme_client.h  (17 Funktionen)       ← stabiles Implementierungsprotokoll
           ┌───────────────────┼───────────────────┐
@@ -26,13 +26,13 @@ Später zusätzlich: `client.wit → Canonical ABI → client.component.wasm`
 ## Was nachgewiesen ist
 
 `tests/compatibility/run.sh` führt **dieselben, unveränderten** Test-Binaries
-gegen alle drei Cores aus:
+(C#, Java) bzw. dieselbe Testsuite (Dart) gegen alle drei Cores aus:
 
-| Core | C ABI Conformance | C# SDK (13 Tests) | Java SDK (13 Tests) |
-|---|---|---|---|
-| Rust (`core-rust`, tokio) | ✅ ~2950 Checks | ✅ 13/13 | ✅ 13/13 |
-| Go (`alt-cores/go`, cgo) | ✅ ~2980 Checks | ✅ 13/13 | ✅ 13/13 |
-| Zig (`alt-cores/zig`, eager Stub) | ✅ basic-Profil | ✅ 7/7 basic | ✅ 7/7 basic |
+| Core | C ABI Conformance | C# SDK (13 Tests) | Java SDK (13 Tests) | Dart SDK (13 Tests) |
+|---|---|---|---|---|
+| Rust (`core-rust`, tokio) | ✅ ~2950 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
+| Go (`alt-cores/go`, cgo) | ✅ ~2980 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
+| Zig (`alt-cores/zig`, eager Stub) | ✅ basic-Profil | ✅ 7/7 basic | ✅ 7/7 basic | ✅ 7/7 basic |
 
 Abgedeckt: Sync Call, Async Call, Async Error, Cancellation, Cancel/Completion-
 Race, Stream, Stream Cancellation, Object Lifetime, Double Drop, Concurrent
@@ -71,8 +71,13 @@ sdk/java/build.sh && javac --release 22 -cp build/java/acme-client.jar -d build/
 cargo run --manifest-path core-rust/Cargo.toml --bin acme-mock-server   # ws://127.0.0.1:9001
 ```
 
-Benötigt: Rust ≥ 1.80, .NET 8, JDK ≥ 22 (Panama FFM ist ab 22 final), Go ≥ 1.22,
-Zig 0.16 (optional), Swift ≥ 5.9 (macOS/Linux).
+Benötigt: Rust ≥ 1.80, .NET 8, JDK ≥ 22 (Panama FFM ist ab 22 final), Dart ≥ 3.3,
+Go ≥ 1.22, Zig 0.16 (optional), Swift ≥ 5.9 (macOS/Linux).
+
+```bash
+(cd examples/dart && dart pub get && dart run bin/main.dart)
+(cd sdk/dart && dart test)                               # ACME_TEST_PROFILE=basic für den Zig-Stub
+```
 
 ## Die öffentliche API in den Zielsprachen
 
@@ -101,6 +106,18 @@ for try await event in client.events() { … }
 // Fehler: catch ClientError.notFound
 ```
 
+```dart
+final client = AcmeClient(options);
+await client.connect();
+final customer = await client.getCustomer('4711');
+await for (final event in client.events()) { … }            // Stream<ClientEvent>
+await client.getCustomer('4711', cancellationToken: token);   // optionaler Abbruch
+// Fehler: on ClientErrorNotFound { … } bzw. switch (e) { ClientErrorNotFound() => … }
+```
+
+Für Flutter siehe [docs/FLUTTER.md](docs/FLUTTER.md) (Bibliothek je Plattform
+mitliefern, Isolates/UI, Beispiel-Widget).
+
 ## Projektstruktur
 
 ```
@@ -109,9 +126,9 @@ wit/abi-ids.lock          append-only Tabelle aller numerischen Wire-IDs
 abi/acme_client.h         die native ABI (17 Funktionen)
 abi/ABI.md                normative Spezifikation: Ownership, Async, Streams, Threading, Encoding
 generator/                acme-wit-gen (Rust, nutzt wit-parser): WIT → C#, Java, Swift, Rust-Core-Glue
-generated/{csharp,java,swift}   generierter SDK-Code (committed, --check in CI)
-runtime/{csharp,java,swift}     handgeschriebene, generische SDK-Runtime
-sdk/{csharp,java,swift}   Paketierung: Runtime + generierter Code (.csproj, build.sh, Package.swift)
+generated/{csharp,java,swift,dart}   generierter SDK-Code (committed, --check in CI)
+runtime/{csharp,java,swift,dart}     handgeschriebene, generische SDK-Runtime
+sdk/{csharp,java,swift,dart}   Paketierung: Runtime + generierter Code (.csproj, build.sh, Package.swift, pubspec.yaml)
 core-rust/                Rust-Core
   src/api/                  idiomatischer async-Rust-Client (die eigentliche Logik)
   src/protocol/             Backend-Frames (JSON über WebSocket)
@@ -124,12 +141,14 @@ core-rust/                Rust-Core
   src/ffi/                  generischer ABI-Adapter — die einzige Datei mit extern "C"
 alt-cores/go/             alternativer Core in Go (cgo, c-shared)
 alt-cores/zig/            alternativer Stub-Core in Zig (eager, single-threaded)
-examples/{csharp,java,swift}
+examples/{csharp,java,swift,dart}
 tests/abi/conformance.c   sprachneutrale ABI-Konformität (dlopen, jeder Core)
 tests/compatibility/      Matrix-Runner + absichtlich inkompatible Fake-Cores
-tests/{csharp,java}       SDK-Testsuiten (Swift: sdk/swift/Tests)
+tests/{csharp,java}       SDK-Testsuiten (Swift: sdk/swift/Tests, Dart: sdk/dart/test)
 scripts/                  test-all.sh, build-native.sh, zig-cc.sh
 docs/COMPONENT_MODEL.md   Weg zu client.component.wasm
+docs/FLUTTER.md           Dart-SDK in Flutter-Apps
+docs/ROADMAP.md           geplant: Generator-Emitter in Bun/TypeScript, JNI-Backend, …
 ```
 
 ## Kernentscheidungen (Details in [abi/ABI.md](abi/ABI.md))
@@ -197,6 +216,9 @@ Von `acme-wit-gen`, aus `wit/client.wit` + `wit/abi-ids.lock`:
   `Contract`, Panama-FFM-Downcall-Bindings (`NativeAbi`).
 * **Swift:** `struct`s, `enum`s (mit Associated Values), `Error`-Konformität,
   Codec-Extensions, `AcmeClient` (`async throws`, `AcmeStream`), ABI-Konstanten.
+* **Dart:** unveränderliche Klassen mit Wertgleichheit, Enhanced Enums,
+  `sealed class`-Hierarchien (Fehlertypen `implements Exception`), Codec,
+  `AcmeClient` (`Future`, `Stream`, `CancellationToken`), `dart:ffi`-Bindings.
 * **Rust-Core:** Typen, Codec, ein Trait pro Ressource (`ClientResource`), der
   `method_id`-Dispatcher.
 * **Lock-Datei:** neue IDs werden angehängt.
@@ -229,7 +251,9 @@ die einzige gemeinsame Abhängigkeit.
 Nur die SDK-Runtime-Abbildung auf die Idiome der Sprache: C# `GCHandle` +
 `UnmanagedCallersOnly` + `TaskCompletionSource`; Java Panama-Upcall + Key-Map
 + `CompletableFuture`-Unterklasse + Reactive-Streams-konformer Publisher;
-Swift `Unmanaged` + `CheckedContinuation` + `withTaskCancellationHandler`.
+Swift `Unmanaged` + `CheckedContinuation` + `withTaskCancellationHandler`;
+Dart `NativeCallable.listener` + `Completer` + pull-basierter `StreamController`
++ `Finalizer`.
 Dazu kommen die Namens- und Typabbildung im jeweiligen Emitter des Generators.
 
 ### Was bleibt bei Rust → Go/Zig unverändert?

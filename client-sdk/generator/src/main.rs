@@ -8,6 +8,7 @@
 //!         generated/csharp/*.g.cs          (C# SDK surface + P/Invoke table)
 //!         generated/java/**/*.java         (Java SDK surface + Panama FFM table)
 //!         generated/swift/*.swift          (Swift SDK surface)
+//!         generated/dart/*.dart            (Dart/Flutter SDK surface + dart:ffi bindings)
 //! With --check nothing is written; the exit code is non-zero if any output
 //! (including the lock file) is out of date. Use it in CI.
 
@@ -17,6 +18,7 @@ macro_rules! w {
 
 mod abi_table;
 mod gen_csharp;
+mod gen_dart;
 mod gen_java;
 mod gen_rust;
 mod gen_swift;
@@ -64,6 +66,9 @@ fn main() -> Result<()> {
     }
     for (name, text) in gen_swift::emit(&model) {
         outputs.push((root.join("generated/swift").join(name), text));
+    }
+    for (name, text) in gen_dart::emit(&model) {
+        outputs.push((root.join("generated/dart").join(name), text));
     }
 
     let mut stale = vec![];

@@ -11,3 +11,7 @@ client-sdk/**/obj/
 .zig-cache/
 zig-out/
 *.o
+# Dart
+.dart_tool/
+client-sdk/sdk/dart/pubspec.lock
+client-sdk/examples/dart/pubspec.lock
