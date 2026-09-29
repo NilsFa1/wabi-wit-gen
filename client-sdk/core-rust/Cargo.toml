@@ -20,6 +20,8 @@ default = ["mock-backend"]
 mock-backend = []
 
 [dependencies]
+# Contract-agnostic ABI runtime (handles, futures, streams, codec, host calls, exports)
+acme-abi-rt = { path = "../runtime/rust" }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "net"] }
 tokio-util = "0.7"
 tokio-stream = { version = "0.1", features = ["sync"] }

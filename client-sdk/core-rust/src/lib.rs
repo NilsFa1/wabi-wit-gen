@@ -9,12 +9,12 @@
 //!   crypto/     HMAC-SHA256 challenge/response
 //!   mock/       mock backend (tests, examples)
 //!   generated/  types + codec + dispatch, generated from wit/client.wit
-//!   ffi/        generic native ABI adapter (abi/acme_abi_functions.h)
+//!
+//! The generic native ABI adapter lives in the `acme-abi-rt` crate (runtime/rust).
 //! ```
 
 pub mod api;
 pub mod crypto;
-pub mod ffi;
 pub mod generated;
 #[cfg(feature = "mock-backend")]
 pub mod mock;
@@ -24,3 +24,12 @@ pub mod transport;
 pub mod websocket;
 
 pub use api::*;
+
+/// The single line that binds the generated contract to this core's types.
+/// The generated exports (`generated::exports`) reference `crate::Core`.
+pub struct Core;
+
+impl generated::Implementation for Core {
+    const CORE_INFO: &'static std::ffi::CStr = c"acme-rust-core/0.1.0 (tokio)";
+    type Client = api::Client;
+}

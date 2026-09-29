@@ -3,9 +3,19 @@
 version = 4
 
 [[package]]
+name = "acme-abi-rt"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "acme-client-core"
 version = "0.1.0"
 dependencies = [
+ "acme-abi-rt",
  "base64",
  "futures",
  "getrandom",

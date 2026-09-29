@@ -1,11 +1,11 @@
 //! Generic stream handle: a pull-based byte stream whose `next()` returns an
 //! ordinary future handle, so hosts need exactly one await mechanism.
 
-use super::abi_types::*;
-use super::future::{FutureSlot, Outcome};
-use super::handles::{self, Entry, KIND_FUTURE};
-use super::host::AbiStream;
-use super::runtime;
+use crate::abi_types::*;
+use crate::future::{FutureSlot, Outcome};
+use crate::handles::{self, Entry, KIND_FUTURE};
+use crate::host::AbiStream;
+use crate::runtime;
 use futures::StreamExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

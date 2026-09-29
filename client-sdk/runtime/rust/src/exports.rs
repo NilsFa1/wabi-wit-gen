@@ -1,17 +1,16 @@
-//! The generic implementation of the 17 functions of abi/acme_abi_functions.h.
-//! Nothing here is exported directly: the generated `generated::exports`
-//! module exports them under the package's symbol prefix
-//! (`acme_client_call_sync`, ...) and forwards here. Every entry point:
+//! The generic implementation of the functions of abi/acme_abi_functions.h,
+//! parameterised over the WIT [`Package`]. Nothing here is exported directly:
+//! the generated `exports` module exports them under the package's symbol
+//! prefix (`acme_client_call_sync`, ...) and forwards here. Every entry point:
 //!   * validates pointers and handles (never trusts the host),
 //!   * catches panics (unwinding across `extern "C"` would be UB),
 //!   * writes out-parameters on every path.
 
-use super::abi_types::*;
-use super::future::{FutureSlot, Outcome};
-use super::handles::{self, Entry, KIND_FUTURE, KIND_OBJECT, KIND_STREAM};
-use super::host::{AbiError, ObjectRef};
-use super::{runtime, Core};
-use crate::generated;
+use crate::abi_types::*;
+use crate::future::{FutureSlot, Outcome};
+use crate::handles::{self, Entry, KIND_FUTURE, KIND_OBJECT, KIND_STREAM};
+use crate::host::{AbiError, ObjectRef};
+use crate::{runtime, Package};
 use futures::FutureExt;
 use std::ffi::{c_char, c_void, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -53,21 +52,26 @@ pub extern "C" fn acme_abi_version() -> u32 {
     ACME_ABI_VERSION
 }
 
-pub extern "C" fn acme_abi_capabilities() -> u64 {
-    ACME_CAP_SYNC_CALLS
+pub extern "C" fn acme_abi_capabilities<P: Package>() -> u64 {
+    let caps = ACME_CAP_SYNC_CALLS
         | ACME_CAP_ASYNC_CALLS
         | ACME_CAP_STREAMS
         | ACME_CAP_CANCELLATION
         | ACME_CAP_THREADED_CALLBACK
-        | ACME_CAP_PAYLOAD_MSGPACK_1
+        | ACME_CAP_PAYLOAD_MSGPACK_1;
+    if P::HOST_CALLS {
+        caps | ACME_CAP_HOST_CALLS
+    } else {
+        caps
+    }
 }
 
-pub extern "C" fn acme_contract_id() -> *const c_char {
-    generated::CONTRACT_ID_C.as_ptr()
+pub extern "C" fn acme_contract_id<P: Package>() -> *const c_char {
+    P::CONTRACT_ID.as_ptr()
 }
 
-pub extern "C" fn acme_core_info() -> *const c_char {
-    c"acme-rust-core/0.1.0 (tokio)".as_ptr()
+pub extern "C" fn acme_core_info<P: Package>() -> *const c_char {
+    P::CORE_INFO.as_ptr()
 }
 
 pub extern "C" fn acme_status_name(status: acme_status) -> *const c_char {
@@ -101,7 +105,7 @@ pub unsafe extern "C" fn acme_buffer_free(buffer: acme_buffer) {
 
 /// # Safety
 /// `request` must be readable for `len` bytes; `out_response` writable.
-pub unsafe extern "C" fn acme_call_sync(
+pub unsafe extern "C" fn acme_call_sync<P: Package>(
     object: u64,
     method_id: u32,
     request: acme_bytes,
@@ -114,7 +118,7 @@ pub unsafe extern "C" fn acme_call_sync(
     let r = catch_unwind(AssertUnwindSafe(|| -> Result<Vec<u8>, AbiError> {
         let req = request_slice(request)?;
         let obj = resolve_object(object)?;
-        generated::dispatch_sync::<Core>(obj, method_id, req)
+        P::dispatch_sync(obj, method_id, req)
     }));
     let (status, bytes) = match r {
         Ok(Ok(v)) => (ACME_OK, v),
@@ -127,7 +131,7 @@ pub unsafe extern "C" fn acme_call_sync(
 
 /// # Safety
 /// `request` must be readable for `len` bytes; `out_future` writable.
-pub unsafe extern "C" fn acme_call_async(
+pub unsafe extern "C" fn acme_call_async<P: Package>(
     object: u64,
     method_id: u32,
     request: acme_bytes,
@@ -140,7 +144,7 @@ pub unsafe extern "C" fn acme_call_async(
     guard(|| {
         let fut = match request_slice(request)
             .and_then(|req| Ok((req, resolve_object(object)?)))
-            .and_then(|(req, obj)| generated::dispatch_async::<Core>(obj, method_id, req))
+            .and_then(|(req, obj)| P::dispatch_async(obj, method_id, req))
         {
             Ok(f) => f,
             Err(e) => return e.status(),

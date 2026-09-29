@@ -2,10 +2,10 @@
 //! FFI runtime. Nothing here knows about customers, clients or any other WIT
 //! type.
 
-use super::abi_types::*;
-use super::handles::{self, Entry, ObjectEntry, KIND_OBJECT, KIND_STREAM};
-use super::stream::StreamSlot;
-use super::wire::{WireError, Writer};
+use crate::abi_types::*;
+use crate::handles::{self, Entry, ObjectEntry, KIND_OBJECT, KIND_STREAM};
+use crate::stream::StreamSlot;
+use crate::wire::{WireError, Writer};
 use futures::StreamExt;
 use std::any::Any;
 use std::future::Future;

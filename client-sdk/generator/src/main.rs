@@ -105,9 +105,6 @@ fn main() -> Result<()> {
         outputs.push((root.join(format!("generated/c/{}.h", model.symbol_prefix())), abi_table::emit_c_header(&model)));
     }
     if cfg.has("rust") {
-        if model.needs_host_calls() {
-            bail!("target rust: host calls (WIT imports) are not implemented for the Rust core yet");
-        }
         let out = cfg.rust_out.as_ref().context("target rust needs rust_out")?;
         outputs.push((root.join(out), gen_rust::emit(&model)));
     }

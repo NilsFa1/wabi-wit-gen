@@ -6,6 +6,9 @@ use std::ffi::c_void;
 
 pub type acme_status = i32;
 pub type acme_future_callback = Option<unsafe extern "C" fn(user_data: *mut c_void, future: u64)>;
+/// ABI 1.1: `void (*)(void* user_data, uint32_t method_id, const uint8_t* req, size_t len, uint64_t call)`
+pub type acme_host_handler =
+    Option<unsafe extern "C" fn(user_data: *mut c_void, method_id: u32, request: *const u8, request_len: usize, call: u64)>;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -44,7 +47,8 @@ impl acme_buffer {
     }
 }
 
-pub const ACME_ABI_VERSION: u32 = (1 << 16) | 0;
+/// ABI 1.1: optional host calls (ACME_CAP_HOST_CALLS).
+pub const ACME_ABI_VERSION: u32 = (1 << 16) | 1;
 
 pub const ACME_CAP_SYNC_CALLS: u64 = 1 << 0;
 pub const ACME_CAP_ASYNC_CALLS: u64 = 1 << 1;
@@ -52,6 +56,7 @@ pub const ACME_CAP_STREAMS: u64 = 1 << 2;
 pub const ACME_CAP_CANCELLATION: u64 = 1 << 3;
 pub const ACME_CAP_THREADED_CALLBACK: u64 = 1 << 4;
 pub const ACME_CAP_PAYLOAD_MSGPACK_1: u64 = 1 << 5;
+pub const ACME_CAP_HOST_CALLS: u64 = 1 << 6;
 
 pub const ACME_OK: acme_status = 0;
 pub const ACME_PENDING: acme_status = 1;

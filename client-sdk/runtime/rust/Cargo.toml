@@ -1,0 +1,11 @@
+[package]
+name = "acme-abi-rt"
+version = "0.1.0"
+edition = "2021"
+description = "Contract-agnostic runtime for Rust cores implementing the Acme native ABI (abi/acme_abi.h)"
+publish = false
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+tokio-util = "0.7"
+futures = "0.3"

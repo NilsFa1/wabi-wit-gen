@@ -7,8 +7,8 @@
 //! The first transition out of Pending wins; later ones are no-ops. That single
 //! rule resolves every "completes exactly while being cancelled" race.
 
-use super::abi_types::*;
-use super::runtime;
+use crate::abi_types::*;
+use crate::runtime;
 use std::ffi::c_void;
 use std::sync::Mutex;
 use tokio::task::AbortHandle;

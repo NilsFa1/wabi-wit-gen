@@ -7,9 +7,9 @@
 //! reject e.g. a future handle passed to acme_stream_next; hosts must treat
 //! handles as opaque.
 
-use super::future::FutureSlot;
-use super::host::ObjectRef;
-use super::stream::StreamSlot;
+use crate::future::FutureSlot;
+use crate::host::ObjectRef;
+use crate::stream::StreamSlot;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
