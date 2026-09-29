@@ -41,7 +41,8 @@ final class CoreInfo {
       throw AcmeIncompatibleLibraryException("native core '$description' implements ABI $abiMajor.$abiMinor, "
           'this SDK needs ${AcmeCapabilities.abiMajor}.${AcmeCapabilities.abiMinor}+');
     }
-    if (capabilities & required != required) {
+    final needed = required | (AcmeCapabilities.requiresHostCalls ? AcmeCapabilities.hostCalls : 0);
+    if (capabilities & needed != needed) {
       throw AcmeIncompatibleLibraryException("native core '$description' lacks required capabilities");
     }
     final at = contractId.indexOf('@');
@@ -329,4 +330,57 @@ final class NativeBackend implements ClientBackend {
 
   @override
   void dropObject(int object) => _abi.acme_object_drop(object);
+
+  // ------------------------------------------------- host calls (ABI 1.1)
+
+  NativeCallable<AcmeHostHandler>? _host;
+
+  /// Installs [dispatch] (generated: `<Package>Host.register`) as the handler
+  /// for all WIT imports of this package. The core invokes the handler on one
+  /// of ITS threads; NativeCallable.listener returns there immediately and runs
+  /// the app code later on this isolate. The request stays valid until the
+  /// reply (ABI.md §4a), so copying it here is safe. Every call is answered
+  /// exactly once with acme_host_reply, also when the app code throws.
+  void registerHost(Future<Uint8List> Function(int methodId, Uint8List request) dispatch) {
+    final register = _abi.acme_host_register, reply = _abi.acme_host_reply;
+    if (register == null || reply == null || info.capabilities & AcmeCapabilities.hostCalls == 0) {
+      throw AcmeIncompatibleLibraryException("native core '${info.description}' does not support host calls (ABI 1.1)");
+    }
+    void onCall(Pointer<Void> userData, int methodId, Pointer<Uint8> request, int length, int call) {
+      final bytes = length == 0 ? Uint8List(0) : Uint8List.fromList(request.asTypedList(length));
+      _answer(dispatch, reply, methodId, bytes, call);
+    }
+
+    final callable = NativeCallable<AcmeHostHandler>.listener(onCall)..keepIsolateAlive = false;
+    final status = register(callable.nativeFunction, nullptr);
+    if (status != AcmeStatus.ok) {
+      callable.close();
+      throw _error(status);
+    }
+    _host?.close();
+    _host = callable;
+  }
+
+  /// Removes the handler; later host calls fail inside the core.
+  void unregisterHost() {
+    _abi.acme_host_register?.call(nullptr, nullptr);
+    _host?.close();
+    _host = null;
+  }
+
+  static Future<void> _answer(Future<Uint8List> Function(int, Uint8List) dispatch,
+      int Function(int, int, AcmeBytes) reply, int methodId, Uint8List request, int call) async {
+    var status = AcmeStatus.ok;
+    Uint8List response;
+    try {
+      response = await dispatch(methodId, request);
+    } on AcmeNativeException catch (e) {
+      status = e.status;
+      response = utf8.encode(e.message);
+    } catch (e) {
+      status = AcmeStatus.errInternal; // an app bug: reported to the core, never lost
+      response = utf8.encode('$e');
+    }
+    using((arena) => reply(call, status, _bytes(arena, response).ref));
+  }
 }

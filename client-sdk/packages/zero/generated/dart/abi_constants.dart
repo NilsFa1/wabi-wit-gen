@@ -18,6 +18,8 @@ abstract final class MethodIds {
   static const dpopSignerConstructor = 0x0200;
   static const dpopSignerThumbprint = 0x0201;
   static const dpopSignerCreateProof = 0x0202;
+  static const hostKeysPublicKey = 0x0101; // import, answered by the app
+  static const hostKeysSign = 0x0102; // import, answered by the app
 }
 
 /// ABI 1.1 status codes (abi/acme_abi.h).

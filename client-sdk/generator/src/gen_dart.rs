@@ -17,6 +17,9 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
     for r in &m.resources {
         files.push((format!("{}.dart", snake(&format!("{}-{}", m.namespace, r.name))), resource(m, r)));
     }
+    if m.needs_host_calls() {
+        files.push((format!("{}_host.dart", snake(&m.package)), host(m)));
+    }
     files
 }
 
@@ -419,6 +422,11 @@ fn constants(m: &Model) -> String {
             w!(o, "  static const {}{} = {:#06x};", camel(&r.name), pascal(&f.name), f.id);
         }
     }
+    for h in &m.imports {
+        for f in &h.funcs {
+            w!(o, "  static const {}{} = {:#06x}; // import, answered by the app", camel(&h.name), pascal(&f.name), f.id);
+        }
+    }
     w!(o, "}}");
     w!(o, "");
     w!(o, "/// ABI {}.{} status codes (abi/acme_abi.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
@@ -625,4 +633,121 @@ fn request(o: &mut String, params: &[(String, Ty)], ind: &str) {
     for (n, t) in params {
         w!(o, "{ind}{}", enc(t, &ident(n), 1));
     }
+}
+
+fn host_ret(r: &Ret) -> String {
+    match r {
+        Ret::Unit | Ret::Result { ok: None, .. } => "Future<void>".into(),
+        Ret::Value(t) | Ret::Result { ok: Some(t), .. } => format!("Future<{}>", dt(t)),
+    }
+}
+
+/// App-side host calls (ABI 1.1): one interface per imported WIT interface,
+/// plus `<Package>Host.register(...)` which decodes requests and encodes answers.
+fn host(m: &Model) -> String {
+    let cls = format!("{}Host", pascal(&m.package));
+    let mut o = header("constant_identifier_names");
+    w!(o, "import 'dart:async';");
+    w!(o, "import 'dart:typed_data';");
+    w!(o, "");
+    w!(o, "import 'abi_constants.dart';");
+    w!(o, "import 'types.dart';");
+    w!(o, "import 'wire_codec.dart';");
+    w!(o, "{RUNTIME}");
+    for h in &m.imports {
+        w!(o, "");
+        docs(&mut o, &h.docs, "");
+        w!(o, "///");
+        w!(o, "/// WIT import `{}`: implemented by the APP, called by the core. Domain", h.name);
+        w!(o, "/// errors are reported by throwing the generated error type.");
+        w!(o, "abstract interface class {} {{", pascal(&h.name));
+        for f in &h.funcs {
+            docs(&mut o, &f.docs, "  ");
+            let ps: Vec<String> = f.params.iter().map(|(n, t)| format!("{} {}", dt(t), ident(n))).collect();
+            w!(o, "  {} {}({});", host_ret(&f.ret), ident(&f.name), ps.join(", "));
+        }
+        w!(o, "}}");
+    }
+    let params: Vec<String> = m.imports.iter().map(|h| format!("{} {}", pascal(&h.name), ident(&h.name))).collect();
+    let args: Vec<String> = m.imports.iter().map(|h| ident(&h.name)).collect();
+    w!(o, "");
+    w!(o, "/// Connects the app's implementations of the WIT imports of {} to the core.", m.contract_id());
+    w!(o, "abstract final class {cls} {{");
+    w!(o, "  /// Call once at startup, before the core needs the app (process-wide).");
+    w!(o, "  static void register({}, {{NativeBackend? backend}}) {{", params.join(", "));
+    w!(o, "    (backend ?? NativeBackend.shared).registerHost((methodId, request) => _dispatch({}, methodId, request));", args.join(", "));
+    w!(o, "  }}");
+    w!(o, "");
+    w!(o, "  /// Removes the registration.");
+    w!(o, "  static void unregister({{NativeBackend? backend}}) => (backend ?? NativeBackend.shared).unregisterHost();");
+    w!(o, "");
+    w!(o, "  static Future<Uint8List> _dispatch({}, int methodId, Uint8List request) async {{", params.join(", "));
+    w!(o, "    final r = MsgPackReader(request);");
+    w!(o, "    final w = MsgPackWriter();");
+    w!(o, "    switch (methodId) {{");
+    for h in &m.imports {
+        let target = ident(&h.name);
+        for f in &h.funcs {
+            w!(o, "      case MethodIds.{}{}:", camel(&h.name), pascal(&f.name));
+            w!(o, "        r.readTupleHeader({});", f.params.len());
+            let mut locals = vec![];
+            for (n, t) in &f.params {
+                let l = format!("{}{}", ident(&f.name), pascal(n)); // unique per case
+                w!(o, "        final {l} = {};", dec(t, "r", 1));
+                locals.push(l);
+            }
+            w!(o, "        if (r.remaining != 0) throw AcmeProtocolException('trailing bytes in host call request');");
+            let call = format!("await {target}.{}({})", ident(&f.name), locals.join(", "));
+            match &f.ret {
+                Ret::Unit => {
+                    w!(o, "        {call};");
+                    w!(o, "        w.writeNil();");
+                }
+                Ret::Value(t) => {
+                    w!(o, "        final ret = {call};");
+                    w!(o, "        {}", enc(t, "ret", 1));
+                }
+                Ret::Result { ok, err } => {
+                    w!(o, "        try {{");
+                    match ok {
+                        Some(t) => {
+                            w!(o, "          final ret = {call};");
+                            w!(o, "          w..writeArrayHeader(2)..writeUint(0);");
+                            w!(o, "          {}", enc(t, "ret", 1));
+                        }
+                        None => {
+                            w!(o, "          {call};");
+                            w!(o, "          w..writeArrayHeader(2)..writeUint(0)..writeNil();");
+                        }
+                    }
+                    match err {
+                        Some(Ty::Named(n)) => {
+                            w!(o, "        }} on {} catch (e) {{", pascal(n));
+                            w!(o, "          w..writeArrayHeader(2)..writeUint(1);");
+                            w!(o, "          WireCodec.write{}(w, e);", pascal(n));
+                        }
+                        Some(t) => {
+                            w!(o, "        }} on AcmeCallFailedException catch (e) {{");
+                            w!(o, "          if (e.error is! {}) rethrow;", dt(t));
+                            w!(o, "          final err = e.error as {};", dt(t));
+                            w!(o, "          w..writeArrayHeader(2)..writeUint(1);");
+                            w!(o, "          {}", enc(t, "err", 1));
+                        }
+                        None => {
+                            w!(o, "        }} on AcmeCallFailedException {{");
+                            w!(o, "          w..writeArrayHeader(2)..writeUint(1)..writeNil();");
+                        }
+                    }
+                    w!(o, "        }}");
+                }
+            }
+        }
+    }
+    w!(o, "      default:");
+    w!(o, "        throw AcmeNativeException(AcmeStatus.errUnknownMethod, 'unknown host method 0x${{methodId.toRadixString(16)}}');");
+    w!(o, "    }}");
+    w!(o, "    return w.takeBytes();");
+    w!(o, "  }}");
+    w!(o, "}}");
+    o
 }
