@@ -37,6 +37,13 @@
       <groupId>de.gematik.pki.gemlibpki</groupId>
       <artifactId>gemLibPki</artifactId>
       <version>${version.gemlibpki}</version>
+      <!-- xades4j brings BouncyCastle 1.70 (jdk15on) next to gemLibPki's 1.71.1 (jdk18on):
+           same packages twice, with different jar signers. Keep only the newer one. -->
+      <exclusions>
+        <exclusion><groupId>org.bouncycastle</groupId><artifactId>bcpkix-jdk15on</artifactId></exclusion>
+        <exclusion><groupId>org.bouncycastle</groupId><artifactId>bcprov-jdk15on</artifactId></exclusion>
+        <exclusion><groupId>org.bouncycastle</groupId><artifactId>bcutil-jdk15on</artifactId></exclusion>
+      </exclusions>
     </dependency>
     <!-- @CEntryPoint & co.; provided by native-image at build time -->
     <dependency>
@@ -142,6 +149,8 @@
               <nativeImageArgs>
                 <arg>-H:+ReportExceptionStackTraces</arg>
                 <arg>--enable-url-protocols=http</arg>
+                <!-- GraalVM 23 finds a SAX locator in the image heap (JAXB/XML setup at build time) -->
+                <arg>--initialize-at-build-time=org.xml.sax.helpers.LocatorImpl</arg>
               </nativeImageArgs>
             </configuration>
           </plugin>
