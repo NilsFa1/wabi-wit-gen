@@ -50,14 +50,39 @@ Es gibt keine manuellen Schritte für jniLibs, xcframework, DLL oder dylib mehr
   Dart-Testsuite läuft in CI über `flutter test`.
 * Braucht eine Umgebung mit Flutter-SDK, Android-NDK und Xcode (CI-Runner).
 
+## Offen: Host-Calls (ABI 1.1) im Zig-Core
+
+**Status:** bewusst offen gelassen.
+
+Host-Calls funktionieren in allen SDK-Sprachen (C#, Java Panama/JNI, Dart,
+Swift) und in den Cores Go, Rust und C#. Der Zig-Core (`alt-cores/zig`) ist ein
+eager Stub mit ABI 1.0 und kann noch keine Host-Calls auslösen. Dafür braucht es:
+
+* `<prefix>_host_register` / `<prefix>_host_reply` in `acme_core.zig`
+  (Handler + `user_data` global, offene Calls in einer Tabelle, Request bis zur
+  Antwort halten, späte Antworten nach Abbruch akzeptieren),
+* echte asynchrone Futures (heute sind Futures „born complete“): ein Host-Call
+  wartet auf die App, also muss die Arbeit auf einem eigenen Thread laufen,
+* einen zero-Core in Zig (oder ein Zig-Beispielpaket mit Imports) und die
+  Aufnahme in `packages/zero/run-tests.sh`.
+
 ## Erledigt
 
 * ~~Android/Java: generisches JNI-Backend~~ → `runtime/java/JniAbi.java` +
   `runtime/java/jni/acme_jni.c`; Android-Jar mit Java-17-Bytecode; in der
   Kompatibilitätsmatrix gegen alle Cores getestet.
+* ~~Go-Emitter für den Core-seitigen Dispatch~~ → `generator/src/gen_go.rs` +
+  `runtime/go`; `alt-cores/go` enthält nur noch Geschäftslogik.
+* ~~Host-Calls (ABI 1.1): der Core ruft die App~~ → SDKs: C#, Java (Panama,
+  JNI), Dart, Swift; Cores: Go (`runtime/go`), Rust (`runtime/rust`,
+  Crate `acme-abi-rt`), C# (`runtime/csharp-core`). Beispiel: `packages/zero`
+  mit drei austauschbaren Cores (Go mit gematik libzero, Rust, C#).
 
 ## Weitere Punkte
 
-* Go-Emitter für den Core-seitigen Dispatch (`alt-cores/go/dispatch.go`).
+* Host-Calls: Abbruch in Richtung App (die App erfährt heute nicht, dass ein
+  offener Host-Call aufgegeben wurde), Streams/Ressourcen als Parameter.
+* C#-Core-Emitter (heute ist die Dispatch-Tabelle der C#-Cores handgeschrieben).
+* Swift lokal nicht kompiliert (nur macOS-CI).
 * `wss://` im Rust-Core (tokio-tungstenite mit `rustls-tls-webpki-roots`).
 * Optionaler `Unknown`-Case für Variants zur Vorwärtskompatibilität.

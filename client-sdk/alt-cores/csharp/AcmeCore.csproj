@@ -21,6 +21,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="*.cs" />
+    <!-- Contract-agnostic C# core runtime (handles, futures, streams, generic exports). -->
+    <Compile Include="../../runtime/csharp-core/CoreAbi.cs" LinkBase="Runtime" />
     <!-- Reused from the SDK side: the generated contract types + codec and the MessagePack runtime. -->
     <Compile Include="../../generated/csharp/Types.g.cs" LinkBase="Contract" />
     <Compile Include="../../generated/csharp/WireCodec.g.cs" LinkBase="Contract" />

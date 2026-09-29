@@ -63,7 +63,8 @@ static class Dispatch
                 Done(Params(request, 0));
                 if (method == State) return (Status.Ok, Wire.Encode(w => WireCodec.WriteConnectionState(w, c.State)));
                 var (reader, unsubscribe) = c.Subscribe();
-                var stream = Handles.Add(Handles.Stream, new NativeStream(reader, unsubscribe));
+                var stream = Handles.Add(Handles.Stream,
+                    new NativeStream<ClientEvent>(reader, e => Wire.Encode(w => WireCodec.WriteClientEvent(w, e)), unsubscribe));
                 return (Status.Ok, Wire.Encode(w => w.WriteUInt(stream)));
             }
             case Connect or Disconnect or GetCustomer or CreateCustomer or SendCommand:

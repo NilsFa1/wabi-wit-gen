@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    gematik:zero PoC core in C#, compiled ahead-of-time (NativeAOT) to a plain
+    native library libgematik_zero.so — a drop-in replacement for the Go core
+    (libzero) and the Rust core: same WIT package, same symbols.
+
+      dotnet publish -c Release -r linux-x64   →  publish/gematik_zero.so
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <AssemblyName>gematik_zero</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <!-- Contract-agnostic C# core runtime, incl. host calls (the package has WIT imports). -->
+    <Compile Include="../../../runtime/csharp-core/CoreAbi.cs" LinkBase="Runtime" />
+    <Compile Include="../../../runtime/csharp-core/CoreHostCalls.cs" LinkBase="Runtime" />
+    <!-- Reused from the SDK side: the generated contract types + codec and the MessagePack runtime. -->
+    <Compile Include="../generated/csharp/Types.g.cs" LinkBase="Contract" />
+    <Compile Include="../generated/csharp/WireCodec.g.cs" LinkBase="Contract" />
+    <Compile Include="../../../runtime/csharp/MsgPack.cs" LinkBase="Contract" />
+    <Compile Include="../../../runtime/csharp/Exceptions.cs" LinkBase="Contract" />
+  </ItemGroup>
+</Project>

@@ -232,6 +232,8 @@ acme_status <prefix>_host_reply(uint64_t call, acme_status status, acme_bytes re
 | Dart/Flutter | `HostKeys` (`Future<T>`, wirft `ZeroError…`) | `ZeroHost.register(app)` | `NativeCallable.listener` → Isolate-Event-Loop |
 | Swift | `HostKeys` (`async throws`) | `ZeroHost.register(hostKeys:)` | `@convention(c)`-Closure → `Task.detached` |
 | Go (Core) | ruft `HostKeysSign(ctx, …)` (generiert) | – | `runtime/go` (`HostCall`) |
+| Rust (Core) | ruft `host_keys::sign(…).await` (generiert) | – | `runtime/rust` (`host_calls::call`, tokio) |
+| C# (Core, NativeAOT) | ruft `HostKeys.SignAsync(…)` | – | `runtime/csharp-core` (`HostCalls.CallAsync`) |
 
 Protokolltest (sprachneutral): [`tests/abi/host_calls.c`](../tests/abi/host_calls.c);
 Beispiel-Paket: [`packages/zero`](../packages/zero).

@@ -1,11 +1,16 @@
-// C# ABI adapter: implements abi/acme_abi_functions.h (prefix acme_client_) with [UnmanagedCallersOnly]
-// exports. NativeAOT turns this into a plain C shared library. This file
-// replaces core-rust/src/ffi — nothing on the SDK side changes.
+// Hand-written, contract-agnostic runtime for C# cores (NativeAOT): implements
+// abi/acme_abi_functions.h with [UnmanagedCallersOnly] exports. The C#
+// counterpart of runtime/rust and runtime/go.
+//
+// A C# core consists of this file (+ CoreHostCalls.cs if its package has WIT
+// imports) and a package part that completes `partial class Exports` with
+//   const string Prefix, ContractIdText, CoreInfoText; const bool HostCallsEnabled
+// and provides `static class Dispatch { Sync(...); Async(...) }`. Resource
+// objects implement ICoreObject.
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
-using Acme.Client;
 using Acme.Client.Runtime;
 
 namespace Acme.Core;
@@ -40,10 +45,13 @@ static class Handles
 
     public static ulong Add(ulong kind, object value)
     {
-        var h = (kind << 56) | (ulong)Interlocked.Increment(ref _serial);
+        var h = NextId(kind);
         Table[h] = value;
         return h;
     }
+
+    /// <summary>A never-reused id of the given kind (also used for host-call ids).</summary>
+    public static ulong NextId(ulong kind) => (kind << 56) | (ulong)Interlocked.Increment(ref _serial);
 
     public static T? Get<T>(ulong h) where T : class => Table.TryGetValue(h, out var v) ? v as T : null;
 
@@ -133,8 +141,14 @@ sealed unsafe class NativeFuture
     }
 }
 
-/// <summary>Pull-based stream over a channel of events; items encoded lazily.</summary>
-sealed class NativeStream(ChannelReader<ClientEvent> events, Action release)
+/// <summary>A WIT resource instance; Close runs when the host drops its handle.</summary>
+interface ICoreObject
+{
+    void Close();
+}
+
+/// <summary>Pull-based stream over a channel of items; items encoded lazily.</summary>
+sealed class NativeStream<T>(ChannelReader<T> events, Func<T, byte[]> encode, Action release) : INativeStream
 {
     private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentQueue<byte[]> _leftover = new(); // items dequeued by a pull that lost to cancel
@@ -168,7 +182,7 @@ sealed class NativeStream(ChannelReader<ClientEvent> events, Action release)
                 {
                     if (events.TryRead(out var e))
                     {
-                        item = Wire.Encode(w => WireCodec.WriteClientEvent(w, e));
+                        item = encode(e);
                         status = Status.Ok;
                         break;
                     }
@@ -202,6 +216,12 @@ sealed class NativeStream(ChannelReader<ClientEvent> events, Action release)
     }
 }
 
+interface INativeStream
+{
+    (int, ulong) Next();
+    void Cancel();
+}
+
 /// <summary>Runs async work on the thread pool (kept out of the unsafe export class).</summary>
 static class Runner
 {
@@ -233,13 +253,11 @@ static class Wire
     }
 }
 
-static unsafe class Exports
+static unsafe partial class Exports
 {
-    /// <summary>Package symbol prefix (ABI.md §1.1): acme:client -> acme_client_call_sync, ...</summary>
-    private const string Prefix = "acme_client_";
-
-    private static readonly byte* ContractId = Utf8("acme:client@1.0.0");
-    private static readonly byte* CoreInfo = Utf8("acme-csharp-core/0.1.0 (NativeAOT, thread pool)");
+    // Prefix, ContractIdText, CoreInfoText and HostCallsEnabled come from the package part.
+    private static readonly byte* ContractId = Utf8(ContractIdText);
+    private static readonly byte* CoreInfo = Utf8(CoreInfoText);
     private static readonly Dictionary<int, nint> StatusNames = new()
     {
         [Status.Ok] = (nint)Utf8("ACME_OK"), [Status.Pending] = (nint)Utf8("ACME_PENDING"),
@@ -255,7 +273,7 @@ static unsafe class Exports
     /// <summary>Static, NUL-terminated, never freed (process lifetime).</summary>
     private static byte* Utf8(string s) => (byte*)Marshal.StringToCoTaskMemUTF8(s);
 
-    private static AcmeBuffer ToBuffer(byte[]? data)
+    internal static AcmeBuffer ToBuffer(byte[]? data)
     {
         if (data is null || data.Length == 0) return default;
         var p = (byte*)NativeMemory.Alloc((nuint)data.Length);
@@ -263,17 +281,17 @@ static unsafe class Exports
         return new AcmeBuffer { Ptr = p, Len = (nuint)data.Length };
     }
 
-    private static byte[]? FromBytes(AcmeBytes b) =>
+    internal static byte[]? FromBytes(AcmeBytes b) =>
         b.Len == 0 ? Array.Empty<byte>() : b.Ptr == null ? null : new ReadOnlySpan<byte>(b.Ptr, checked((int)b.Len)).ToArray();
 
     // ------------------------------------------------------------ metadata
 
     [UnmanagedCallersOnly(EntryPoint = Prefix + "abi_version", CallConvs = [typeof(CallConvCdecl)])]
-    public static uint AbiVersion() => 1u << 16;
+    public static uint AbiVersion() => 1u << 16 | 1u; // 1.1: optional host calls
 
-    // sync + async + streams + cancellation + threaded callbacks + msgpack v1
+    // sync + async + streams + cancellation + threaded callbacks + msgpack v1 (+ host calls)
     [UnmanagedCallersOnly(EntryPoint = Prefix + "abi_capabilities", CallConvs = [typeof(CallConvCdecl)])]
-    public static ulong Capabilities() => 0b111111;
+    public static ulong Capabilities() => 0b111111 | (HostCallsEnabled ? 1ul << 6 : 0);
 
     [UnmanagedCallersOnly(EntryPoint = Prefix + "contract_id", CallConvs = [typeof(CallConvCdecl)])]
     public static byte* Contract() => ContractId;
@@ -337,7 +355,7 @@ static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = Prefix + "object_drop", CallConvs = [typeof(CallConvCdecl)])]
     public static int ObjectDrop(ulong obj)
     {
-        if (Handles.Remove<Client>(obj) is not { } c) return Status.InvalidHandle;
+        if (Handles.Remove<ICoreObject>(obj) is not { } c) return Status.InvalidHandle;
         c.Close();
         return Status.Ok;
     }
@@ -388,7 +406,7 @@ static unsafe class Exports
     {
         if (future == null) return Status.InvalidArgument;
         *future = 0;
-        if (Handles.Get<NativeStream>(h) is not { } s) return Status.InvalidHandle;
+        if (Handles.Get<INativeStream>(h) is not { } s) return Status.InvalidHandle;
         var (status, f) = s.Next();
         *future = f;
         return status;
@@ -397,7 +415,7 @@ static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = Prefix + "stream_cancel", CallConvs = [typeof(CallConvCdecl)])]
     public static int StreamCancel(ulong h)
     {
-        if (Handles.Get<NativeStream>(h) is not { } s) return Status.InvalidHandle;
+        if (Handles.Get<INativeStream>(h) is not { } s) return Status.InvalidHandle;
         s.Cancel();
         return Status.Ok;
     }
@@ -405,7 +423,7 @@ static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = Prefix + "stream_drop", CallConvs = [typeof(CallConvCdecl)])]
     public static int StreamDrop(ulong h)
     {
-        if (Handles.Remove<NativeStream>(h) is not { } s) return Status.InvalidHandle;
+        if (Handles.Remove<INativeStream>(h) is not { } s) return Status.InvalidHandle;
         s.Cancel();
         return Status.Ok;
     }

@@ -50,26 +50,29 @@ implementiert bewusst nur Konstruktor, `state`, `connect`/`disconnect` und
 ### Host-Calls (ABI 1.1): der Core ruft die App — Beispiel gematik zero-lab
 
 [`packages/zero`](packages/zero) ist ein zweites WIT-Paket (`gematik:zero`):
-Ein **Go-Core mit gematik libzero** erzeugt DPoP-Proofs (RFC 9449), der private
-Schlüssel bleibt aber **in der App** (Secure Enclave, Android Keystore, TPM …).
-Der Core ruft dazu das importierte WIT-Interface `host-keys` auf (ABI.md §4a).
-`packages/zero/run-tests.sh` prüft dieselben Szenarien aus jeder Sprache; jede
-App spielt den Keystore mit ihrer Plattform-Kryptografie und verifiziert die
-Signatur und den libzero-Thumbprint unabhängig:
+Der Core erzeugt DPoP-Proofs (RFC 9449), der private Schlüssel bleibt aber
+**in der App** (Secure Enclave, Android Keystore, TPM …). Der Core ruft dazu das
+importierte WIT-Interface `host-keys` auf (ABI.md §4a). Es gibt **drei
+austauschbare Cores** mit denselben Symbolen (`libgematik_zero`):
 
-| App-Sprache | Keystore im Test | Ergebnis |
-|---|---|---|
-| C (Protokolltest, `tests/abi/host_calls.c`) | OpenSSL | ✅ 129 Checks |
-| C# | `System.Security.Cryptography.ECDsa` | ✅ 6/6 |
-| Java Panama | JDK `KeyPairGenerator`/`Signature` | ✅ 6/6 |
-| Java JNI (Android-Pfad) | wie oben | ✅ 6/6 |
-| Dart/Flutter | pointycastle | ✅ 6/6 |
-| Swift | Security-Framework (`SecKey`) | ⏳ nur macOS-CI (keine Swift-Toolchain hier) |
+* **Go** mit gematik libzero (`core-go/dpop.go` + generiertes `acme_generated.go`),
+* **Rust** (`core-rust/src/lib.rs` + generiertes `generated.rs`, Runtime-Crate `acme-abi-rt`),
+* **C#** NativeAOT (`core-csharp`, Runtime `runtime/csharp-core`).
 
-Der Go-Core besteht nur aus Geschäftslogik (`packages/zero/core-go/dpop.go`);
-Typen, Codec, Dispatcher, Host-Call-Stubs (`HostKeysSign(ctx, …)`) und die
-exportierten C-Symbole generiert `acme-wit-gen` (Go-Emitter), das Gleiche gilt
-seit diesem Schritt für `alt-cores/go`.
+`packages/zero/run-tests.sh` lässt jede App-Sprache gegen jeden Core laufen;
+jede App spielt den Keystore mit ihrer Plattform-Kryptografie und verifiziert
+Signatur und Thumbprint unabhängig:
+
+| App-Sprache (Keystore im Test) | Go-Core (libzero) | Rust-Core | C#-Core |
+|---|---|---|---|
+| C, Protokolltest `tests/abi/host_calls.c` (OpenSSL) | ✅ 129 Checks | ✅ 129 Checks | ✅ 129 Checks |
+| C# (`ECDsa`) | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
+| Java Panama (JDK `Signature`) | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
+| Java JNI, Android-Pfad | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
+| Dart/Flutter (pointycastle) | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
+| Swift (Security-Framework `SecKey`) | ⏳ nur macOS-CI | ⏳ | ⏳ |
+
+Zig kann noch keine Host-Calls auslösen (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 **Swift** wird generiert und ist vollständig ausgeschrieben (Package,
 Runtime, Tests, Beispiel), konnte in dieser Linux-Umgebung aber **nicht
@@ -165,10 +168,13 @@ core-rust/                Rust-Core
   src/crypto/               HMAC-SHA256 Challenge/Response
   src/mock/                 Mock-Backend (Tests, Beispiele, acme-mock-server)
   src/generated/            aus WIT generiert: Typen, Codec, Trait, Dispatch
-  src/ffi/                  generischer ABI-Adapter — die einzige Datei mit extern "C"
-alt-cores/go/             alternativer Core in Go (cgo, c-shared)
+runtime/rust/             generischer ABI-Adapter für Rust-Cores (Crate acme-abi-rt, inkl. Host-Calls)
+runtime/go/               generischer ABI-Adapter für Go-Cores (Modul acme.example/acmeabi, inkl. Host-Calls)
+runtime/csharp-core/      generischer ABI-Adapter für C#-Cores (NativeAOT, inkl. Host-Calls)
+alt-cores/go/             alternativer Core in Go (cgo, c-shared; Glue generiert)
 alt-cores/zig/            alternativer Stub-Core in Zig (eager, single-threaded)
 alt-cores/csharp/         alternativer Core in C#, per NativeAOT zu einer nativen .so kompiliert
+packages/zero/            2. WIT-Paket gematik:zero (Host-Calls): Cores Go (libzero), Rust, C#; SDKs + Tests
 examples/{csharp,java,swift,dart}
 tests/abi/conformance.c   sprachneutrale ABI-Konformität (dlopen, jeder Core)
 tests/compatibility/      Matrix-Runner + absichtlich inkompatible Fake-Cores
@@ -309,7 +315,7 @@ der gesamte generierte SDK-Code, die SDK-Runtimes, die Pakete, die Beispiele
 und die Testsuiten, und zwar bis auf die **kompilierten Binaries**. Die
 Matrix lädt dieselbe `Acme.Client.Tests.dll` und dieselbe `acme-client.jar`
 gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
-`core-rust/` (Logik + `src/ffi`-Adapter) durch `alt-cores/go/`
+`core-rust/` (Logik + generierter Glue; der ABI-Adapter liegt paketunabhängig in `runtime/rust`) durch `alt-cores/go/`
 (Logik `client.go` + generiertes `acme_generated.go` + Runtime `runtime/go`) bzw. `alt-cores/zig/`.
 
 ## Bekannte Grenzen des PoC
@@ -318,10 +324,10 @@ gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
 * **Android + Java:** Das JNI-Binding ist implementiert und auf dem Desktop-JVM
   gegen alle Cores getestet; auf einem echten Android-Gerät bzw. Emulator lief
   es noch nicht (kein Android-SDK in dieser Umgebung).
-* **Host-Calls im Core:** Nur Go-Cores können Host-Calls auslösen (Rust-,
-  Zig- und C#-Core noch nicht; der Generator lehnt Imports beim Rust-Target ab).
-  Host-Calls kennen noch keinen eigenen Abbruch in Richtung App und keine
-  Streams/Ressourcen als Parameter.
+* **Host-Calls im Core:** Go, Rust und C# können Host-Calls auslösen, Zig noch
+  nicht (Roadmap). Host-Calls kennen noch keinen eigenen Abbruch in Richtung App
+  und keine Streams/Ressourcen als Parameter. Die Dispatch-Tabelle der C#-Cores
+  ist handgeschrieben (kein C#-Core-Emitter).
 * **libzero:** Genutzt wird bisher nur `util.Jwk` (Thumbprint); das `dpop`-Paket
   von zero-lab ist in libzero v0.1.0 nicht veröffentlicht, der Proof entsteht
   deshalb mit jwx (das libzero selbst verwendet).

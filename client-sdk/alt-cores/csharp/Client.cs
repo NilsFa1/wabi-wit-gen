@@ -6,7 +6,7 @@ using Acme.Client;
 
 namespace Acme.Core;
 
-sealed class Client
+sealed class Client : ICoreObject
 {
     private readonly ClientOptions _options;
     private readonly object _gate = new();
