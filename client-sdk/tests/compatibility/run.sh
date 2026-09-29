@@ -15,7 +15,7 @@ have_zig() { have zig || python3 -c "import ziglang" 2>/dev/null; }
 
 echo "== building cores"
 (cd "$ROOT/core-rust" && cargo build --release --quiet)
-declare -A LIB=( [rust]="$ROOT/core-rust/target/release/libacme_client.so" )
+declare -A LIB=( [rust]="${CARGO_TARGET_DIR:-$ROOT/core-rust/target}/release/libacme_client.so" )
 declare -A PROFILE=( [rust]=full [go]=full [zig]=basic )
 if have go; then
   (cd "$ROOT/alt-cores/go" && CGO_ENABLED=1 go build -buildmode=c-shared -o "$B/go/libacme_client.so" .)
