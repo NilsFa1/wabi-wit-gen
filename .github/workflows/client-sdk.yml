@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "25" }
       - uses: actions/setup-go@v5
-        with: { go-version: "1.24" }
+        with: { go-version: "1.26" }
       - uses: dart-lang/setup-dart@v1
       - run: pip install ziglang==0.16.0
       - run: (cd sdk/dart && dart pub get && dart analyze --fatal-infos)
@@ -51,7 +51,7 @@ jobs:
           DYLD_LIBRARY_PATH=$LIB swift test -Xlinker -L$LIB
           DYLD_LIBRARY_PATH=$LIB swift run -Xlinker -L$LIB AcmeExample
       - uses: actions/setup-go@v5
-        with: { go-version: "1.24" }
+        with: { go-version: "1.26" }
       - name: gematik:zero host calls from Swift (Security framework as keystore)
         run: |
           LIB=$GITHUB_WORKSPACE/client-sdk/build/zero

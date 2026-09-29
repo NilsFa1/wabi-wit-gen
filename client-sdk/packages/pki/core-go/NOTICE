@@ -1,0 +1,21 @@
+gematik:pki Go core (packages/pki/core-go)
+
+This directory — the Go core of the gematik:pki SDK — is licensed under the
+European Union Public Licence v. 1.2 (EUPL-1.2), see LICENSE. It is a work
+based on gematik's gempki and is distributed under the same licence.
+
+The native library built from it (libgematik_pki / gematik_pki.dll /
+GematikPki.xcframework) contains:
+
+  github.com/gematik/zero-lab/go/gempki     v0.23.0  EUPL-1.2      (c) gematik GmbH
+  github.com/gematik/zero-lab/go/brainpool  v1.1.0   EUPL-1.2      (c) gematik GmbH
+  golang.org/x/crypto                       v0.57.0  BSD-3-Clause  (c) The Go Authors
+  acme.example/acmeabi (runtime/go)                  the ABI runtime of this repository
+  the Go standard library and runtime                BSD-3-Clause  (c) The Go Authors
+
+The TUC_PKI_018 checks (tuc_pki_018.go) follow gematik's reference
+implementation ref-GemLibPki 5.0.2 (Apache-2.0); error codes and texts are
+taken from its ErrorCode enum.
+
+Source code: this directory, together with the generated glue
+(acme_generated.go) and runtime/go it is built from.

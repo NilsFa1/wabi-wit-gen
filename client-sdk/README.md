@@ -86,13 +86,21 @@ Target `java-core`); die generische Runtime liegt in `runtime/java-core`
 (inkl. C-Shim für die GraalVM-Isolate), Details in
 [packages/pki/core-java/README.md](packages/pki/core-java/README.md).
 
-| App-Sprache | gegen `libgematik_pki.so` (GraalVM native-image) |
-|---|---|
-| Java-Core auf der JVM (Wrapper + Dispatcher) | ✅ 8/8 |
-| C# | ✅ 7/7 |
-| Java Panama / JNI (Android-Pfad) | ✅ 7/7 / ✅ 7/7 |
-| Dart/Flutter | ✅ 7/7 |
-| Swift | ⏳ nur macOS-CI |
+**Zweiter Core in Go** ([packages/pki/core-go](packages/pki/core-go/README.md),
+Lizenz **EUPL-1.2**): gematik zero-lab [gempki](https://github.com/gematik/zero-lab/tree/main/go/gempki)
+für Parsing (inkl. Brainpool), TSL, Admission und OCSP, darüber die Prüfschritte
+von TUC_PKI_018 nach gemLibPki 5.0.2 (gleiche Reihenfolge, Fehlercodes, Texte),
+nur ECC. Eine Bibliothek von ~8–10 MB, per `build.sh` für Linux, Windows, macOS,
+Android (`jniLibs`) und iOS (`.xcframework`) gebaut (`.github/workflows/pki-go.yml`).
+Beide Cores laufen gegen dieselben, unveränderten SDK-Tests.
+
+| App-Sprache | Java-Core (GraalVM native-image) | Go-Core (gempki) |
+|---|---|---|
+| Core-eigene Tests | ✅ 8/8 (JVM) | ✅ `go test` |
+| C# | ✅ 7/7 | ✅ 7/7 |
+| Java Panama / JNI (Android-Pfad) | ✅ 7/7 / ✅ 7/7 | ✅ 7/7 / ✅ 7/7 |
+| Dart/Flutter | ✅ 7/7 | ✅ 7/7 |
+| Swift | ⏳ | ⏳ macOS-CI (`pki-go`) |
 
 **Swift** wird generiert und ist vollständig ausgeschrieben (Package,
 Runtime, Tests, Beispiel), konnte in dieser Linux-Umgebung aber **nicht

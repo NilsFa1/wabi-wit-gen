@@ -1,10 +1,9 @@
-/// PoC: gematik ref-GemLibPki (Java) as a cross-language SDK.
+/// PoC: TUC_PKI_018 ("Zertifikatsprüfung in der TI") as a cross-language SDK.
 ///
-/// The CORE is written in Java: a small wrapper around gemLibPki's
-/// TucPki018Verifier ("TUC_PKI_018: Zertifikatsprüfung in der TI"), compiled
-/// ahead-of-time with GraalVM native-image into a plain C shared library
-/// (libgematik_pki). Apps in C#, Java, Dart, Swift, … use it through the
-/// generated SDKs without a JVM.
+/// Two interchangeable cores implement this contract as a plain C library
+/// (libgematik_pki): core-java wraps gematik ref-GemLibPki (GraalVM
+/// native-image), core-go builds on gematik zero-lab gempki (EUPL-1.2). Apps in
+/// C#, Java, Dart, Swift, … use either through the generated SDKs.
 package gematik:pki@0.1.0;
 
 interface types {

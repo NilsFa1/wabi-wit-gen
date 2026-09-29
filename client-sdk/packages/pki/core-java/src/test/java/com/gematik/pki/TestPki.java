@@ -70,6 +70,7 @@ public final class TestPki {
         var b = new JcaX509v3CertificateBuilder(ca.getSubject(), BigInteger.valueOf(serial++),
                 Date.from(from), Date.from(to), subject, key.getPublic());
         var ext = new JcaX509ExtensionUtils();
+        b.addExtension(Extension.basicConstraints, true, new BasicConstraints(false)); // gemSpec_PKI: critical, as keyUsage
         b.addExtension(Extension.keyUsage, true, new KeyUsage(keyUsage));
         b.addExtension(Extension.extendedKeyUsage, false, new ExtendedKeyUsage(KeyPurposeId.id_kp_clientAuth));
         b.addExtension(Extension.certificatePolicies, false,
@@ -133,7 +134,7 @@ public final class TestPki {
         tsl = tsl(ca);
         valid = ee(ca, caKey, longAgo, future, KeyUsage.digitalSignature);
         expired = ee(ca, caKey, Instant.parse("2020-01-01T00:00:00Z"), Instant.parse("2021-01-01T00:00:00Z"), KeyUsage.digitalSignature);
-        wrongKeyUsage = ee(ca, caKey, longAgo, future, KeyUsage.digitalSignature | KeyUsage.keyEncipherment);
+        wrongKeyUsage = ee(ca, caKey, longAgo, future, KeyUsage.keyAgreement); // C.HCI.AUT needs digitalSignature
         var otherKey = ecKey();
         unknownCa = ee(ca("Unknown CA", otherKey), otherKey, longAgo, future, KeyUsage.digitalSignature);
     }

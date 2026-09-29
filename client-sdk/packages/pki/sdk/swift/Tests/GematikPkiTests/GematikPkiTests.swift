@@ -1,5 +1,5 @@
 // The Swift app side of gematik:pki: TUC_PKI_018 certificate verification with
-// gemLibPki (Java) running as a GraalVM native library. Same scenarios as the
+// either core (gemLibPki via GraalVM, or gempki in Go). Same scenarios as the
 // C#, Java and Dart tests; fixtures from PKI_FIXTURES (see packages/pki/tests/fixtures).
 import Foundation
 import XCTest

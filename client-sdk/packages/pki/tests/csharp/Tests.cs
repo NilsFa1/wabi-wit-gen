@@ -1,5 +1,5 @@
-// The C# app side of gematik:pki: certificate verification with gemLibPki
-// (Java) running as a GraalVM native library — no JVM in this process.
+// The C# app side of gematik:pki: certificate verification with either core
+// (gemLibPki as a GraalVM native library, or gempki in Go) — no JVM here.
 // Fixtures come from core-java/src/test/java/com/gematik/pki/TestPki.java.
 using Gematik.Pki;
 

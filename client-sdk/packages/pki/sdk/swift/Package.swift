@@ -1,7 +1,7 @@
 // swift-tools-version:5.9
 // gematik:pki PoC Swift SDK = shared runtime (Sources/GematikPki/Runtime -> runtime/swift)
 //                           + generated code (Sources/GematikPki/Generated -> packages/pki/generated/swift)
-// linked against the Java core compiled with GraalVM native-image (libgematik_pki).
+// linked against a gematik:pki core (libgematik_pki: core-go or core-java).
 //
 // macOS: `swift test -Xlinker -L<dir with libgematik_pki.dylib>`.
 import PackageDescription

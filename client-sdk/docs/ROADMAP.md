@@ -88,7 +88,24 @@ eager Stub mit ABI 1.0 und kann noch keine Host-Calls auslösen. Dafür braucht 
 * Größe: das Image ist ~65 MB (gemLibPki zieht dss/xades4j/Guice mit);
   Abhängigkeiten ausdünnen oder `-Os`/`--gc` Optionen prüfen,
 * TSL-Signaturprüfung (TUC_PKI_001) und OCSP im Test (Mock-Responder),
-* neuere gemLibPki-Versionen: auf Maven Central liegt nur 0.9.3.
+* gemLibPki aktualisieren: der Core nutzt 0.9.3 (alte groupId
+  `de.gematik.pki.gemlibpki`, 2022); aktuell ist `de.gematik.pki:gemLibPki:5.0.2`
+  (mit dss), native-image-Konfiguration neu aufzeichnen,
+* Android/iOS: per Gluon Substrate gebaut (`pki-mobile`, gluonfx 1.0.24 +
+  Gluon GraalVM 23), auf Geräten noch nicht getestet.
+
+## gematik:pki Go-Core (gempki, EUPL-1.2)
+
+**Status:** TUC_PKI_018 im TSL-Vertrauensmodell (TI 1.0) nach gemLibPki 5.0.2,
+nur ECC; Builds für Linux/Windows/macOS/Android/iOS. Offen:
+
+* TSL-Manager: TSL laden/aktualisieren (`.sha2`-Abgleich), Signatur prüfen
+  (TUC_PKI_001, XAdES), NextUpdate mit Karenz, gemeinsamer Stand für alle Verifier,
+  letzte gültige TSL persistieren (optional über Host-Calls der App),
+* OCSP: Antwort-Cache (CertID als Schlüssel, nextUpdate, LRU, gebündelte
+  Anfragen), Nonce (TE_1057), HTTP optional über Host-Calls,
+* Differenztests gegen den Java-Core mit gemLibPki 5.0.2 und dessen Testdaten,
+* rechtliche Prüfung: EUPL bei statischem Linken (iOS) und App-Store-Bedingungen.
 
 ## Weitere Punkte
 
