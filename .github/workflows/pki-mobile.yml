@@ -34,7 +34,8 @@ jobs:
           echo "Gluon GraalVM: $url"
           mkdir -p "$RUNNER_TEMP/gluon-graal" && cd "$RUNNER_TEMP/gluon-graal"
           curl -fsSL -o graal.tgz "$url" && tar xzf graal.tgz
-          home=$(dirname "$(dirname "$(find "$PWD" -path '*/bin/native-image' | head -1)")")
+          home=$(dirname "$(dirname "$(find "$PWD" -path '*/bin/java' ! -path '*/lib/*' | head -1)")")
+          [ -x "$home/bin/native-image" ] || { echo "no native-image in $home" >&2; exit 1; }
           echo "GRAALVM_HOME=$home" >> "$GITHUB_ENV"
           "$home/bin/java" -version
       - name: Android SDK/NDK from the runner image
