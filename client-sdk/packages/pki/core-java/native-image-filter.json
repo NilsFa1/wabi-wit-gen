@@ -1,0 +1,8 @@
+{
+  "rules": [
+    {"excludeClasses": "org.junit.**"},
+    {"excludeClasses": "org.apache.maven.**"},
+    {"excludeClasses": "com.gematik.pki.CoreTest"},
+    {"excludeClasses": "com.gematik.pki.TestPki"}
+  ]
+}

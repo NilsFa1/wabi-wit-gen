@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  gematik:pki PoC core in Java: a small wrapper around gematik ref-GemLibPki
+  (TUC_PKI_018), compiled with GraalVM native-image into libgematik_pki.so.
+
+    mvn -B verify                 compile + JVM tests (plain JDK 21+)
+    ./build-native.sh             native shared library (needs GraalVM 21+, see README.md)
+
+  Sources compiled into the core:
+    src/main/java                 hand-written business logic (Core, GemLibPkiVerifier)
+    src/generated/java            acme-wit-gen `java-core` target (dispatcher, interfaces)
+    ../../../runtime/java-core    generic Java core runtime (+ GraalVM entry points)
+    ../generated/java (subset)    contract types + codec shared with the Java SDK
+    ../../../runtime/java (subset) MessagePack + exception base classes
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>de.gematik.example</groupId>
+  <artifactId>gematik-pki-core</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <version.gemlibpki>0.9.3</version.gemlibpki>
+    <version.graal-sdk>23.1.2</version.graal-sdk>
+    <version.junit>5.10.2</version.junit>
+    <sdk.sources>${project.build.directory}/generated-sources/sdk</sdk.sources>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>de.gematik.pki.gemlibpki</groupId>
+      <artifactId>gemLibPki</artifactId>
+      <version>${version.gemlibpki}</version>
+    </dependency>
+    <!-- @CEntryPoint & co.; provided by native-image at build time -->
+    <dependency>
+      <groupId>org.graalvm.sdk</groupId>
+      <artifactId>graal-sdk</artifactId>
+      <version>${version.graal-sdk}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${version.junit}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Pull in the parts of the Java SDK the core shares (types, codec, MessagePack). -->
+      <plugin>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>sdk-contract-types</id>
+            <phase>generate-sources</phase>
+            <goals><goal>copy-resources</goal></goals>
+            <configuration>
+              <outputDirectory>${sdk.sources}</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}/../generated/java</directory>
+                  <includes><include>com/gematik/pki/**/*.java</include></includes>
+                  <!-- the SDK client class talks to a native core; the core does not need it -->
+                  <excludes><exclude>com/gematik/pki/CertificateVerifier.java</exclude></excludes>
+                </resource>
+                <resource>
+                  <directory>${project.basedir}/../../../runtime/java</directory>
+                  <includes>
+                    <include>com/acme/client/runtime/MsgPack*.java</include>
+                    <include>com/acme/client/runtime/Acme*Exception.java</include>
+                  </includes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <id>add-sources</id>
+            <phase>generate-sources</phase>
+            <goals><goal>add-source</goal></goals>
+            <configuration>
+              <sources>
+                <source>${project.basedir}/src/generated/java</source>
+                <source>${project.basedir}/../../../runtime/java-core/src</source>
+                <source>${sdk.sources}</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <compilerArgs><arg>-Xlint:all,-serial,-processing,-options</arg></compilerArgs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+      <plugin>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.6.1</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>

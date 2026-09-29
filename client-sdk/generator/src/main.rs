@@ -22,6 +22,7 @@ mod gen_csharp;
 mod gen_dart;
 mod gen_go;
 mod gen_java;
+mod gen_java_core;
 mod gen_rust;
 mod gen_swift;
 mod ir;
@@ -37,18 +38,20 @@ use std::path::{Path, PathBuf};
 ///   targets  = c csharp java swift dart rust go
 ///   rust_out = core-rust/src/generated/mod.rs   (Rust core glue)
 ///   go_out   = alt-cores/go/acme_generated.go   (Go core glue)
+///   java_core_out = core-java/src/generated/java  (Java core glue, GraalVM native-image)
 struct Config {
     abi: PathBuf,
     targets: Vec<String>,
     rust_out: Option<PathBuf>,
     go_out: Option<PathBuf>,
+    java_core_out: Option<PathBuf>,
 }
 
 impl Config {
     fn load(root: &Path) -> Result<Config> {
         let path = root.join("acme-gen.conf");
         let text = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let mut c = Config { abi: "abi".into(), targets: vec![], rust_out: None, go_out: None };
+        let mut c = Config { abi: "abi".into(), targets: vec![], rust_out: None, go_out: None, java_core_out: None };
         for (n, line) in text.lines().enumerate() {
             let line = line.split('#').next().unwrap().trim();
             if line.is_empty() {
@@ -61,6 +64,7 @@ impl Config {
                 "targets" => c.targets = v.split_whitespace().map(String::from).collect(),
                 "rust_out" => c.rust_out = Some(v.into()),
                 "go_out" => c.go_out = Some(v.into()),
+                "java_core_out" => c.java_core_out = Some(v.into()),
                 other => bail!("{}:{}: unknown key `{other}`", path.display(), n + 1),
             }
         }
@@ -114,6 +118,12 @@ fn main() -> Result<()> {
         let depth = out.parent().map(|p| p.components().count()).unwrap_or(0);
         let abi_rel = format!("{}{}", "../".repeat(depth), cfg.abi.display());
         outputs.push((root.join(out), gen_go::emit(&model, &abi_rel)?));
+    }
+    if cfg.has("java-core") {
+        let out = cfg.java_core_out.as_ref().context("target java-core needs java_core_out")?;
+        for (name, text) in gen_java::emit_core(&model)? {
+            outputs.push((root.join(out).join(name), text));
+        }
     }
     let langs: [(&str, fn(&ir::Model) -> Vec<(String, String)>); 4] =
         [("csharp", gen_csharp::emit), ("java", gen_java::emit), ("swift", gen_swift::emit), ("dart", gen_dart::emit)];

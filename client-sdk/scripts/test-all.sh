@@ -19,3 +19,5 @@ echo "== compatibility matrix"
 tests/compatibility/run.sh
 echo "== gematik:zero PoC: host calls from every SDK"
 packages/zero/run-tests.sh
+echo "== gematik:pki PoC: gemLibPki (Java) as a GraalVM native library"
+packages/pki/run-tests.sh

@@ -74,6 +74,26 @@ Signatur und Thumbprint unabhängig:
 
 Zig kann noch keine Host-Calls auslösen (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+### Java als Core-Sprache: gematik ref-GemLibPki als native Bibliothek
+
+[`packages/pki`](packages/pki) (`gematik:pki`) hat einen **Core in Java**: einen
+kleinen Wrapper um gematik [ref-GemLibPki](https://github.com/gematik/ref-GemLibPki)
+mit einer Methode, der Zertifikatsprüfung nach TUC_PKI_018 gegen die CAs einer
+TSL. GraalVM `native-image` kompiliert Wrapper, gemLibPki, BouncyCastle und
+JAXB zu einer nativen Bibliothek; C#-, Java-, Dart- und Swift-Apps brauchen
+**keine JVM**. Generiert werden Dispatcher und Schnittstellen (`acme-wit-gen`
+Target `java-core`); die generische Runtime liegt in `runtime/java-core`
+(inkl. C-Shim für die GraalVM-Isolate), Details in
+[packages/pki/core-java/README.md](packages/pki/core-java/README.md).
+
+| App-Sprache | gegen `libgematik_pki.so` (GraalVM native-image) |
+|---|---|
+| Java-Core auf der JVM (Wrapper + Dispatcher) | ✅ 8/8 |
+| C# | ✅ 7/7 |
+| Java Panama / JNI (Android-Pfad) | ✅ 7/7 / ✅ 7/7 |
+| Dart/Flutter | ✅ 7/7 |
+| Swift | ⏳ nur macOS-CI |
+
 **Swift** wird generiert und ist vollständig ausgeschrieben (Package,
 Runtime, Tests, Beispiel), konnte in dieser Linux-Umgebung aber **nicht
 kompiliert** werden (keine Swift-Toolchain verfügbar). Der CI-Workflow
@@ -174,6 +194,8 @@ runtime/csharp-core/      generischer ABI-Adapter für C#-Cores (NativeAOT, inkl
 alt-cores/go/             alternativer Core in Go (cgo, c-shared; Glue generiert)
 alt-cores/zig/            alternativer Stub-Core in Zig (eager, single-threaded)
 alt-cores/csharp/         alternativer Core in C#, per NativeAOT zu einer nativen .so kompiliert
+runtime/java-core/        generische Runtime für Java-Cores (GraalVM native-image, C-Shim)
+packages/pki/             3. WIT-Paket gematik:pki: Java-Core um gemLibPki (GraalVM), SDKs + Tests
 packages/zero/            2. WIT-Paket gematik:zero (Host-Calls): Cores Go (libzero), Rust, C#; SDKs + Tests
 examples/{csharp,java,swift,dart}
 tests/abi/conformance.c   sprachneutrale ABI-Konformität (dlopen, jeder Core)

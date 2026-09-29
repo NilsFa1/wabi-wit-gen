@@ -78,6 +78,18 @@ eager Stub mit ABI 1.0 und kann noch keine Host-Calls auslösen. Dafür braucht 
   Crate `acme-abi-rt`), C# (`runtime/csharp-core`). Beispiel: `packages/zero`
   mit drei austauschbaren Cores (Go mit gematik libzero, Rust, C#).
 
+## Java-Cores (GraalVM native-image)
+
+**Status:** PoC mit `packages/pki` (gemLibPki). Offen:
+
+* Streams und Host-Calls für Java-Cores (Runtime + `java-core`-Emitter),
+* native Builds pro Zielplattform (macOS/Windows in CI; Android/iOS brauchen
+  GraalVM-Targets bzw. ein anderes Packaging),
+* Größe: das Image ist ~65 MB (gemLibPki zieht dss/xades4j/Guice mit);
+  Abhängigkeiten ausdünnen oder `-Os`/`--gc` Optionen prüfen,
+* TSL-Signaturprüfung (TUC_PKI_001) und OCSP im Test (Mock-Responder),
+* neuere gemLibPki-Versionen: auf Maven Central liegt nur 0.9.3.
+
 ## Weitere Punkte
 
 * Host-Calls: Abbruch in Richtung App (die App erfährt heute nicht, dass ein

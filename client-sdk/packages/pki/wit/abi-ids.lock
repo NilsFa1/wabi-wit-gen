@@ -1,0 +1,34 @@
+# Acme wire-identifier lock file — maintained by acme-wit-gen, commit it.
+#
+# Pins every numeric identifier that appears on the native ABI or in a payload
+# (method ids, record field tags, variant/enum case tags). It is APPEND-ONLY:
+#   * new WIT items get the next free number in their scope,
+#   * existing entries are never renumbered, so reordering client.wit is safe,
+#   * removed items stay here as `retired`; their number is never reused,
+#   * `acme-wit-gen --check` (CI) fails if this file would change.
+#
+# kind     qualified-name                                     id
+case       gematik:pki/types.certificate-profile.c-ch-aut-rsa     1
+case       gematik:pki/types.certificate-profile.c-ch-aut-ecc     2
+case       gematik:pki/types.certificate-profile.c-hp-aut-rsa     3
+case       gematik:pki/types.certificate-profile.c-hp-aut-ecc     4
+case       gematik:pki/types.certificate-profile.c-hci-aut-rsa    5
+case       gematik:pki/types.certificate-profile.c-hci-aut-ecc    6
+case       gematik:pki/types.certificate-profile.c-hci-enc-rsa    7
+case       gematik:pki/types.certificate-profile.c-hci-enc-ecc    8
+case       gematik:pki/types.certificate-profile.c-hci-osig       9
+case       gematik:pki/types.certificate-profile.c-fd-sig         10
+case       gematik:pki/types.certificate-profile.c-fd-osig        11
+case       gematik:pki/types.certificate-profile.c-tsl-sig        12
+field      gematik:pki/types.admission.profile                    1
+field      gematik:pki/types.admission.admission-authority        2
+field      gematik:pki/types.admission.profession-items           3
+field      gematik:pki/types.admission.profession-oids            4
+field      gematik:pki/types.admission.registration-number        5
+field      gematik:pki/types.verification-failure.code            1
+field      gematik:pki/types.verification-failure.message         2
+case       gematik:pki/types.pki-error.verification-failed        1
+case       gematik:pki/types.pki-error.invalid-input              2
+group      gematik:pki/verifier.certificate-verifier              0x01
+method     gematik:pki/verifier.certificate-verifier.constructor  0x0100
+method     gematik:pki/verifier.certificate-verifier.verify       0x0101

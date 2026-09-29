@@ -25,9 +25,12 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: "1.24" }
       - uses: dart-lang/setup-dart@v1
+      - uses: graalvm/setup-graalvm@v1 # native-image for the gematik:pki Java core
+        with: { java-version: "21", distribution: graalvm, set-java-home: false }
       - run: pip install ziglang==0.16.0
       - run: (cd sdk/dart && dart pub get && dart analyze --fatal-infos)
       - run: (cd packages/zero/sdk/dart && dart pub get && dart analyze --fatal-infos)
+      - run: (cd packages/pki/sdk/dart && dart pub get && dart analyze --fatal-infos)
       - run: sudo apt-get install -y libssl-dev # tests/abi/host_calls.c uses OpenSSL as the app keystore
       - run: scripts/test-all.sh
 

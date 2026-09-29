@@ -1,0 +1,71 @@
+/// PoC: gematik ref-GemLibPki (Java) as a cross-language SDK.
+///
+/// The CORE is written in Java: a small wrapper around gemLibPki's
+/// TucPki018Verifier ("TUC_PKI_018: Zertifikatsprüfung in der TI"), compiled
+/// ahead-of-time with GraalVM native-image into a plain C shared library
+/// (libgematik_pki). Apps in C#, Java, Dart, Swift, … use it through the
+/// generated SDKs without a JVM.
+package gematik:pki@0.1.0;
+
+interface types {
+    /// Certificate profiles of gemSpec_PKI as supported by gemLibPki.
+    enum certificate-profile {
+        c-ch-aut-rsa,
+        c-ch-aut-ecc,
+        c-hp-aut-rsa,
+        c-hp-aut-ecc,
+        c-hci-aut-rsa,
+        c-hci-aut-ecc,
+        c-hci-enc-rsa,
+        c-hci-enc-ecc,
+        c-hci-osig,
+        c-fd-sig,
+        c-fd-osig,
+        c-tsl-sig,
+    }
+
+    /// Admission (Rolle) of a successfully verified certificate.
+    record admission {
+        /// The profile the certificate was successfully verified against.
+        profile: certificate-profile,
+        admission-authority: string,
+        profession-items: list<string>,
+        profession-oids: list<string>,
+        registration-number: string,
+    }
+
+    /// A TUC_PKI_018 check that failed.
+    record verification-failure {
+        /// gemLibPki error code, e.g. `SE_1021_CERTIFICATE_NOT_VALID_TIME`.
+        code: string,
+        /// Human-readable description (German, as produced by gemLibPki).
+        message: string,
+    }
+
+    variant pki-error {
+        /// The certificate is not valid for any of the given profiles.
+        verification-failed(verification-failure),
+        /// Malformed certificate, TSL or arguments.
+        invalid-input(string),
+    }
+}
+
+interface verifier {
+    use types.{certificate-profile, admission, pki-error};
+
+    /// TUC_PKI_018 certificate verification against the trust anchors of a TSL.
+    resource certificate-verifier {
+        /// `product-type`: name of the calling product (appears in gemLibPki
+        /// messages); `tsl`: the TSL (XML) listing the trusted CAs.
+        constructor(product-type: string, tsl: list<u8>);
+
+        /// Verifies a DER-encoded end-entity certificate against the profiles
+        /// (the first matching profile wins). OCSP is only queried if
+        /// `with-ocsp` is set (needs network access to the TSL's responder).
+        verify: async func(certificate: list<u8>, profiles: list<certificate-profile>, with-ocsp: bool) -> result<admission, pki-error>;
+    }
+}
+
+world pki-sdk {
+    export verifier;
+}
