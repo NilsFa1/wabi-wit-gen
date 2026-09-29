@@ -21,6 +21,7 @@ export CGO_ENABLED=1
 
 gobuild() { # mode output, env from the caller
   (cd "$HERE" && go build -trimpath -ldflags="-s -w" -buildmode="$1" -o "$2" .)
+  echo "   built $2"
 }
 check() { # nm-command file
   local syms; syms=$("${@:1:$#-1}" "${@: -1}")
@@ -52,8 +53,9 @@ case "$TARGET" in
   macos)
     for arch in arm64:arm64 x86_64:amd64; do
       IFS=: read -r carch goarch <<<"$arch"
-      CC="xcrun clang -arch $carch -mmacosx-version-min=11.0" GOOS=darwin GOARCH=$goarch \
-        gobuild c-shared "$OUT/lib${PREFIX}_$carch.dylib"
+      echo "== macOS $carch ($(go version), $(clang --version | head -1))"
+      CC=clang CGO_CFLAGS="-arch $carch -mmacosx-version-min=11.0" CGO_LDFLAGS="-arch $carch -mmacosx-version-min=11.0" \
+        GOOS=darwin GOARCH=$goarch gobuild c-shared "$OUT/lib${PREFIX}_$carch.dylib"
     done
     lipo -create -output "$OUT/lib$PREFIX.dylib" "$OUT/lib${PREFIX}_arm64.dylib" "$OUT/lib${PREFIX}_x86_64.dylib"
     install_name_tool -id "@rpath/lib$PREFIX.dylib" "$OUT/lib$PREFIX.dylib"
@@ -64,11 +66,15 @@ case "$TARGET" in
     W="$OUT/work"; mkdir -p "$W/device" "$W/sim" "$W/headers"
     cp "$ROOT/abi/acme_abi.h" "$HERE/../generated/c/$PREFIX.h" "$W/headers/"
     sdk() { xcrun -sdk "$1" --show-sdk-path; }
-    CC="xcrun -sdk iphoneos clang -arch arm64 -miphoneos-version-min=13.0 -isysroot $(sdk iphoneos)" \
+    echo "== iOS device arm64"
+    CC=clang CGO_CFLAGS="-arch arm64 -miphoneos-version-min=13.0 -isysroot $(sdk iphoneos)" \
+      CGO_LDFLAGS="-arch arm64 -miphoneos-version-min=13.0 -isysroot $(sdk iphoneos)" \
       GOOS=ios GOARCH=arm64 gobuild c-archive "$W/device/lib$PREFIX.a"
     for arch in arm64:arm64 x86_64:amd64; do # simulator slices, merged
       IFS=: read -r carch goarch <<<"$arch"
-      CC="xcrun -sdk iphonesimulator clang -arch $carch -mios-simulator-version-min=13.0 -isysroot $(sdk iphonesimulator)" \
+      echo "== iOS simulator $carch"
+      flags="-arch $carch -mios-simulator-version-min=13.0 -isysroot $(sdk iphonesimulator)"
+      CC=clang CGO_CFLAGS="$flags" CGO_LDFLAGS="$flags" \
         GOOS=ios GOARCH=$goarch gobuild c-archive "$W/sim/lib${PREFIX}_$carch.a"
     done
     lipo -create -output "$W/sim/lib$PREFIX.a" "$W/sim/lib${PREFIX}_arm64.a" "$W/sim/lib${PREFIX}_x86_64.a"
