@@ -14,8 +14,9 @@ public struct CoreInfo: Sendable, CustomStringConvertible {
     public var abiMinor: UInt32 { abiVersion & 0xffff }
     public var description: String { "\(coreDescription) (abi \(abiMajor).\(abiMinor), \(contractId))" }
 
+    /// Required capabilities; cancellation / threaded-callback are informative (cancel is always callable).
     public static let required: UInt64 =
-        AcmeAbi.capSyncCalls | AcmeAbi.capAsyncCalls | AcmeAbi.capStreams | AcmeAbi.capCancellation | AcmeAbi.capPayloadMsgpack1
+        AcmeAbi.capSyncCalls | AcmeAbi.capAsyncCalls | AcmeAbi.capStreams | AcmeAbi.capPayloadMsgpack1
 
     /// ABI: same major, core minor >= SDK minor. Contract: same package + major, core minor >= SDK minor.
     public func ensureCompatible() throws {

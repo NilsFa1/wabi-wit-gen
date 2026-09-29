@@ -49,8 +49,10 @@ extern "C" {
 #define ACME_CAP_SYNC_CALLS        (1ull << 0) /* acme_call_sync                      */
 #define ACME_CAP_ASYNC_CALLS       (1ull << 1) /* acme_call_async + acme_future_*     */
 #define ACME_CAP_STREAMS           (1ull << 2) /* acme_stream_*                       */
-#define ACME_CAP_CANCELLATION      (1ull << 3) /* cancel actually interrupts work     */
-#define ACME_CAP_THREADED_CALLBACK (1ull << 4) /* callbacks come from core threads    */
+#define ACME_CAP_CANCELLATION      (1ull << 3) /* cancel interrupts in-flight work (informative) */
+#define ACME_CAP_THREADED_CALLBACK (1ull << 4) /* futures may complete later, callbacks come
+                                                  from core threads (informative; an eager core
+                                                  completes every future before returning it) */
 #define ACME_CAP_PAYLOAD_MSGPACK_1 (1ull << 5) /* payload encoding v1 (ABI.md §5)     */
 
 /* ------------------------------------------------------------------------ */

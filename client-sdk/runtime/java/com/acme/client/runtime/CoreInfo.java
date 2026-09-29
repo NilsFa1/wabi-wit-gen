@@ -6,8 +6,9 @@ import java.lang.foreign.SymbolLookup;
 import java.nio.file.Path;
 
 public record CoreInfo(int abiVersion, long capabilities, String contractId, String description) {
+    /** Required capabilities; CANCELLATION / THREADED_CALLBACK are informative (cancel is always callable). */
     public static final long REQUIRED = NativeAbi.ACME_CAP_SYNC_CALLS | NativeAbi.ACME_CAP_ASYNC_CALLS
-            | NativeAbi.ACME_CAP_STREAMS | NativeAbi.ACME_CAP_CANCELLATION | NativeAbi.ACME_CAP_PAYLOAD_MSGPACK_1;
+            | NativeAbi.ACME_CAP_STREAMS | NativeAbi.ACME_CAP_PAYLOAD_MSGPACK_1;
 
     public int abiMajor() {
         return abiVersion >>> 16;

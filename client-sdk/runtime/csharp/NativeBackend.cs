@@ -14,10 +14,14 @@ namespace Acme.Client.Runtime;
 
 public sealed class NativeBackend : IClientBackend
 {
-    /// <summary>Capabilities this SDK relies on.</summary>
+    /// <summary>
+    /// Capabilities this SDK relies on. Cancellation and ThreadedCallback are informative:
+    /// acme_future_cancel is always callable, and an eager core (futures born complete)
+    /// has nothing to interrupt.
+    /// </summary>
     public const AcmeCapabilities Required =
         AcmeCapabilities.SyncCalls | AcmeCapabilities.AsyncCalls | AcmeCapabilities.Streams |
-        AcmeCapabilities.Cancellation | AcmeCapabilities.PayloadMsgpack1;
+        AcmeCapabilities.PayloadMsgpack1;
 
     /// <summary>Environment variable with an explicit path to the core library (tests, side-by-side cores).</summary>
     public const string LibraryPathVariable = "ACME_NATIVE_LIB";
