@@ -251,7 +251,8 @@ public sealed record CoreInfo(uint AbiVersion, AcmeCapabilities Capabilities, st
         if (AbiMajor != NativeAbi.AbiMajor || AbiMinor < NativeAbi.AbiMinor)
             throw new AcmeIncompatibleLibraryException(
                 $"native core '{Description}' implements ABI {AbiMajor}.{AbiMinor}, this SDK needs {NativeAbi.AbiMajor}.{NativeAbi.AbiMinor}+");
-        var missing = NativeBackend.Required & ~Capabilities;
+        var required = NativeBackend.Required | (NativeAbi.RequiresHostCalls ? AcmeCapabilities.HostCalls : 0);
+        var missing = required & ~Capabilities;
         if (missing != 0)
             throw new AcmeIncompatibleLibraryException($"native core '{Description}' lacks capabilities: {missing}");
         var at = ContractId.IndexOf('@');

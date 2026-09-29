@@ -23,6 +23,9 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
     for r in &m.resources {
         files.push((format!("{}.g.cs", class_name(m, r)), resource(m, r)));
     }
+    if m.needs_host_calls() {
+        files.push((format!("{}.g.cs", host_class(m)), host(m)));
+    }
     files
 }
 
@@ -450,8 +453,9 @@ fn screaming_to_pascal(s: &str) -> String {
 fn emit_request(o: &mut String, f: &Func) {
     w!(o, "        var w = new MsgPackWriter();");
     w!(o, "        w.WriteArrayHeader({});", f.params.len());
-    for (n, t) in &f.params {
-        w!(o, "        {}", enc(t, &ident(n), 1));
+    for (i, (n, t)) in f.params.iter().enumerate() {
+        // distinct depth per parameter: pattern variables share the method scope
+        w!(o, "        {}", enc(t, &ident(n), 1 + 10 * i));
     }
 }
 
@@ -496,6 +500,11 @@ fn native_abi(m: &Model) -> String {
             w!(o, "    public const uint {}{} = {:#06x};", pascal(&r.name), pascal(&f.name), f.id);
         }
     }
+    for h in &m.imports {
+        for f in &h.funcs {
+            w!(o, "    public const uint {}{} = {:#06x}; // import, answered by the app", pascal(&h.name), pascal(&f.name), f.id);
+        }
+    }
     w!(o, "}}");
     w!(o, "");
     w!(o, "/// <summary>ABI status codes (abi/acme_abi.h).</summary>");
@@ -538,7 +547,7 @@ fn native_abi(m: &Model) -> String {
     w!(o, "    public const uint AbiMajor = {};", abi_table::ABI_MAJOR);
     w!(o, "    /// <summary>Minimum ABI minor this package needs (1 if it uses host calls).</summary>");
     w!(o, "    public const uint AbiMinor = {};", m.required_abi_minor());
-    w!(o, "    public const bool RequiresHostCalls = {};", m.needs_host_calls());
+    w!(o, "    public static readonly bool RequiresHostCalls = {};", m.needs_host_calls());
     for f in abi_table::FUNCTIONS {
         let ps: Vec<String> = f.params.iter().map(|(t, n)| format!("{} {}", ctype(*t), if KEYWORDS.contains(n) { format!("@{n}") } else { n.to_string() })).collect();
         w!(o, "");
@@ -548,6 +557,139 @@ fn native_abi(m: &Model) -> String {
         w!(o, "    [DllImport(Library, EntryPoint = \"{}\", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]", abi_table::symbol(&m.symbol_prefix(), f.name));
         w!(o, "    public static extern {} {}({});", ctype(f.ret), f.name, ps.join(", "));
     }
+    w!(o, "}}");
+    o
+}
+
+/// `gematik:zero` -> `ZeroHost`: registers the app's implementations of the imports.
+fn host_class(m: &Model) -> String {
+    format!("{}Host", pascal(&m.package))
+}
+
+fn host_ret(r: &Ret) -> String {
+    match r {
+        Ret::Unit | Ret::Result { ok: None, .. } => "Task".into(),
+        Ret::Value(t) | Ret::Result { ok: Some(t), .. } => format!("Task<{}>", cs(t)),
+    }
+}
+
+/// App-side host calls (ABI 1.1): one interface per imported WIT interface,
+/// plus `<Package>Host.Register(...)` which decodes requests and encodes answers.
+fn host(m: &Model) -> String {
+    let cls = host_class(m);
+    let mut o = header();
+    w!(o, "using System;");
+    w!(o, "using System.Collections.Generic;");
+    w!(o, "using System.Threading.Tasks;");
+    w!(o, "using {RT_NS};");
+    w!(o, "");
+    w!(o, "namespace {};", cs_ns(m));
+    for h in &m.imports {
+        w!(o, "");
+        docs(&mut o, &h.docs, "");
+        w!(o, "/// <remarks>WIT import `{}`: implemented by the APP, called by the core on its own", h.name);
+        w!(o, "/// threads. Domain errors are reported by throwing the generated exception.</remarks>");
+        w!(o, "public interface I{}", pascal(&h.name));
+        w!(o, "{{");
+        for f in &h.funcs {
+            docs(&mut o, &f.docs, "    ");
+            let ps: Vec<String> = f.params.iter().map(|(n, t)| format!("{} {}", cs(t), ident(n))).collect();
+            w!(o, "    {} {}Async({});", host_ret(&f.ret), pascal(&f.name), ps.join(", "));
+        }
+        w!(o, "}}");
+    }
+    let params: Vec<String> = m.imports.iter().map(|h| format!("I{} {}", pascal(&h.name), ident(&h.name))).collect();
+    let args: Vec<String> = m.imports.iter().map(|h| ident(&h.name)).collect();
+    w!(o, "");
+    w!(o, "/// <summary>Connects the app's implementations of the WIT imports of {} to the core.</summary>", m.contract_id());
+    w!(o, "public static class {cls}");
+    w!(o, "{{");
+    w!(o, "    /// <summary>Call once at startup, before the core needs the app (process-wide).</summary>");
+    w!(o, "    public static void Register({})", params.join(", "));
+    w!(o, "    {{");
+    for a in &args {
+        w!(o, "        ArgumentNullException.ThrowIfNull({a});");
+    }
+    w!(o, "        HostCalls.Install((methodId, request) => DispatchAsync({}, methodId, request));", args.join(", "));
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    /// <summary>Removes the registration.</summary>");
+    w!(o, "    public static void Unregister() => HostCalls.Uninstall();");
+    w!(o, "");
+    w!(o, "    private static async Task<byte[]> DispatchAsync({}, uint methodId, byte[] request)", params.join(", "));
+    w!(o, "    {{");
+    w!(o, "        var r = new MsgPackReader(request);");
+    w!(o, "        var w = new MsgPackWriter();");
+    w!(o, "        switch (methodId)");
+    w!(o, "        {{");
+    for h in &m.imports {
+        let target = ident(&h.name);
+        for f in &h.funcs {
+            w!(o, "            case MethodIds.{}{}:", pascal(&h.name), pascal(&f.name));
+            w!(o, "            {{");
+            w!(o, "                r.ReadArrayHeader({});", f.params.len());
+            for (n, t) in &f.params {
+                w!(o, "                var {} = {};", ident(n), dec(t, "r", 1));
+            }
+            w!(o, "                if (r.Remaining != 0) throw new AcmeProtocolException(\"trailing bytes in host call request\");");
+            let call = format!("await {target}.{}Async({}).ConfigureAwait(false)", pascal(&f.name), f.params.iter().map(|(n, _)| ident(n)).collect::<Vec<_>>().join(", "));
+            match &f.ret {
+                Ret::Unit => {
+                    w!(o, "                {call};");
+                    w!(o, "                w.WriteNil();");
+                }
+                Ret::Value(t) => {
+                    w!(o, "                var ret = {call};");
+                    w!(o, "                {}", enc(t, "ret", 1));
+                }
+                Ret::Result { ok, err } => {
+                    w!(o, "                try");
+                    w!(o, "                {{");
+                    match ok {
+                        Some(t) => {
+                            w!(o, "                    var ret = {call};");
+                            w!(o, "                    w.WriteArrayHeader(2); w.WriteUInt(0); {}", enc(t, "ret", 1));
+                        }
+                        None => {
+                            w!(o, "                    {call};");
+                            w!(o, "                    w.WriteArrayHeader(2); w.WriteUInt(0); w.WriteNil();");
+                        }
+                    }
+                    w!(o, "                }}");
+                    match err {
+                        Some(Ty::Named(n)) => {
+                            w!(o, "                catch ({} e)", exception_name(n));
+                            w!(o, "                {{");
+                            w!(o, "                    w = new MsgPackWriter();");
+                            w!(o, "                    w.WriteArrayHeader(2); w.WriteUInt(1); WireCodec.Write{}(w, e.Error);", pascal(n));
+                            w!(o, "                }}");
+                        }
+                        Some(t) => {
+                            w!(o, "                catch (AcmeCallFailedException e) when (e.Error is {} err)", cs(t));
+                            w!(o, "                {{");
+                            w!(o, "                    w = new MsgPackWriter();");
+                            w!(o, "                    w.WriteArrayHeader(2); w.WriteUInt(1); {}", enc(t, "err", 1));
+                            w!(o, "                }}");
+                        }
+                        None => {
+                            w!(o, "                catch (AcmeCallFailedException)");
+                            w!(o, "                {{");
+                            w!(o, "                    w = new MsgPackWriter();");
+                            w!(o, "                    w.WriteArrayHeader(2); w.WriteUInt(1); w.WriteNil();");
+                            w!(o, "                }}");
+                        }
+                    }
+                }
+            }
+            w!(o, "                break;");
+            w!(o, "            }}");
+        }
+    }
+    w!(o, "            default:");
+    w!(o, "                throw new AcmeNativeException(AcmeStatus.ErrUnknownMethod, $\"unknown host method 0x{{methodId:x4}}\", null);");
+    w!(o, "        }}");
+    w!(o, "        return w.ToArray();");
+    w!(o, "    }}");
     w!(o, "}}");
     o
 }

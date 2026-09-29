@@ -629,10 +629,13 @@ fn emit_import(o: &mut String, h: &HostInterface) {
             v.push(err.into());
             v.join(", ")
         };
-        docs(o, &f.docs, "");
         w!(o, "// {fname} runs `{}.{}` in the app. The last result is a transport", h.name, f.name);
         w!(o, "// error (*acmeabi.HostError): no handler, cancelled, or a malformed answer.");
         w!(o, "// Only call it from async work.");
+        if f.docs.is_some() {
+            w!(o, "//");
+            docs(o, &f.docs, "");
+        }
         let mut ps = vec!["ctx context.Context".to_string()];
         ps.extend(params_sig(f));
         let sig_s = if sig.len() == 1 { sig[0].clone() } else { format!("({})", sig.join(", ")) };

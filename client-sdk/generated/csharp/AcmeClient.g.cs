@@ -80,7 +80,7 @@ public sealed partial class AcmeClient : IDisposable, IAsyncDisposable
         var w = new MsgPackWriter();
         w.WriteArrayHeader(2);
         w.WriteString(name);
-        if (email is { } x1) { w.WriteString(x1); } else { w.WriteNil(); }
+        if (email is { } x11) { w.WriteString(x11); } else { w.WriteNil(); }
         var r = new MsgPackReader(await _backend.CallAsync(_handle.Value, MethodIds.ClientCreateCustomer, w.ToArray(), cancellationToken).ConfigureAwait(false));
         if (r.ReadResultTag() != 0)
             throw new ClientException(WireCodec.ReadClientError(r));

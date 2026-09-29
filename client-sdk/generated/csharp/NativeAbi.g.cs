@@ -84,7 +84,7 @@ internal static unsafe class NativeAbi
     public const uint AbiMajor = 1;
     /// <summary>Minimum ABI minor this package needs (1 if it uses host calls).</summary>
     public const uint AbiMinor = 0;
-    public const bool RequiresHostCalls = false;
+    public static readonly bool RequiresHostCalls = false;
 
     [DllImport(Library, EntryPoint = "acme_client_abi_version", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern uint acme_abi_version();
