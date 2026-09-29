@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 import static java.lang.foreign.ValueLayout.*;
 
 /**
- * Panama FFM bindings of the generic Acme native ABI 1.0 (abi/acme_client.h).
+ * Panama FFM bindings of the generic Acme native ABI 1.0 (abi/acme_abi.h).
  * Java 22+ only; Android and older JVMs use the JNI backend instead.
  * This list does not grow when WIT functions are added: those are addressed by method id.
  */
@@ -40,23 +40,23 @@ public final class NativeAbi {
             throw new UnsupportedOperationException("the Java SDK supports 64-bit targets only");
         }
         var linker = Linker.nativeLinker();
-        acme_abi_version = linker.downcallHandle(find(lookup, "acme_abi_version"), FunctionDescriptor.of(JAVA_INT));
-        acme_abi_capabilities = linker.downcallHandle(find(lookup, "acme_abi_capabilities"), FunctionDescriptor.of(JAVA_LONG));
-        acme_contract_id = linker.downcallHandle(find(lookup, "acme_contract_id"), FunctionDescriptor.of(ADDRESS));
-        acme_core_info = linker.downcallHandle(find(lookup, "acme_core_info"), FunctionDescriptor.of(ADDRESS));
-        acme_status_name = linker.downcallHandle(find(lookup, "acme_status_name"), FunctionDescriptor.of(ADDRESS, JAVA_INT));
-        acme_buffer_free = linker.downcallHandle(find(lookup, "acme_buffer_free"), FunctionDescriptor.ofVoid(ACME_BUFFER));
-        acme_call_sync = linker.downcallHandle(find(lookup, "acme_call_sync"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, JAVA_INT, ACME_BYTES, ADDRESS));
-        acme_call_async = linker.downcallHandle(find(lookup, "acme_call_async"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, JAVA_INT, ACME_BYTES, ADDRESS));
-        acme_object_drop = linker.downcallHandle(find(lookup, "acme_object_drop"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
-        acme_future_subscribe = linker.downcallHandle(find(lookup, "acme_future_subscribe"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, ADDRESS, ADDRESS));
-        acme_future_poll = linker.downcallHandle(find(lookup, "acme_future_poll"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
-        acme_future_take = linker.downcallHandle(find(lookup, "acme_future_take"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, ADDRESS));
-        acme_future_cancel = linker.downcallHandle(find(lookup, "acme_future_cancel"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
-        acme_future_drop = linker.downcallHandle(find(lookup, "acme_future_drop"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
-        acme_stream_next = linker.downcallHandle(find(lookup, "acme_stream_next"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, ADDRESS));
-        acme_stream_cancel = linker.downcallHandle(find(lookup, "acme_stream_cancel"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
-        acme_stream_drop = linker.downcallHandle(find(lookup, "acme_stream_drop"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
+        acme_abi_version = linker.downcallHandle(find(lookup, "acme_client_abi_version"), FunctionDescriptor.of(JAVA_INT));
+        acme_abi_capabilities = linker.downcallHandle(find(lookup, "acme_client_abi_capabilities"), FunctionDescriptor.of(JAVA_LONG));
+        acme_contract_id = linker.downcallHandle(find(lookup, "acme_client_contract_id"), FunctionDescriptor.of(ADDRESS));
+        acme_core_info = linker.downcallHandle(find(lookup, "acme_client_core_info"), FunctionDescriptor.of(ADDRESS));
+        acme_status_name = linker.downcallHandle(find(lookup, "acme_client_status_name"), FunctionDescriptor.of(ADDRESS, JAVA_INT));
+        acme_buffer_free = linker.downcallHandle(find(lookup, "acme_client_buffer_free"), FunctionDescriptor.ofVoid(ACME_BUFFER));
+        acme_call_sync = linker.downcallHandle(find(lookup, "acme_client_call_sync"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, JAVA_INT, ACME_BYTES, ADDRESS));
+        acme_call_async = linker.downcallHandle(find(lookup, "acme_client_call_async"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, JAVA_INT, ACME_BYTES, ADDRESS));
+        acme_object_drop = linker.downcallHandle(find(lookup, "acme_client_object_drop"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
+        acme_future_subscribe = linker.downcallHandle(find(lookup, "acme_client_future_subscribe"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, ADDRESS, ADDRESS));
+        acme_future_poll = linker.downcallHandle(find(lookup, "acme_client_future_poll"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
+        acme_future_take = linker.downcallHandle(find(lookup, "acme_client_future_take"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, ADDRESS));
+        acme_future_cancel = linker.downcallHandle(find(lookup, "acme_client_future_cancel"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
+        acme_future_drop = linker.downcallHandle(find(lookup, "acme_client_future_drop"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
+        acme_stream_next = linker.downcallHandle(find(lookup, "acme_client_stream_next"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, ADDRESS));
+        acme_stream_cancel = linker.downcallHandle(find(lookup, "acme_client_stream_cancel"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
+        acme_stream_drop = linker.downcallHandle(find(lookup, "acme_client_stream_drop"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
     }
 
     private static MemorySegment find(SymbolLookup lookup, String name) {

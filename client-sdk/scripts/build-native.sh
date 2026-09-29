@@ -52,10 +52,11 @@ build_apple() {
   lipo -create "$R"/{aarch64,x86_64}-apple-darwin/release/libacme_client.dylib -output "$OUT/osx/libacme_client.dylib"
   lipo -create "$R"/{aarch64,x86_64}-apple-darwin/release/libacme_client.a -output "$OUT/apple/tmp/macos.a"
   lipo -create "$R"/{aarch64-apple-ios-sim,x86_64-apple-ios}/release/libacme_client.a -output "$OUT/apple/tmp/sim.a"
-  # Headers + module map so Swift can `import CAcmeClient` from the binary target.
+  # Headers + module map so Swift can `import CAcmeClient` from the binary target:
+  # generic ABI types + the package's prefixed prototypes (generated/c).
   local H="$OUT/apple/tmp/include"
-  mkdir -p "$H" && cp "$ROOT/abi/acme_client.h" "$H/"
-  printf 'module CAcmeClient {\n    header "acme_client.h"\n    export *\n}\n' > "$H/module.modulemap"
+  mkdir -p "$H" && cp "$ROOT/abi/acme_abi.h" "$ROOT/abi/acme_abi_functions.h" "$ROOT/generated/c/acme_client.h" "$H/"
+  printf 'module CAcmeClient {\n    header "acme_abi.h"\n    header "acme_client.h"\n    export *\n}\n' > "$H/module.modulemap"
   rm -rf "$OUT/apple/AcmeClient.xcframework"
   xcodebuild -create-xcframework \
     -library "$R/aarch64-apple-ios/release/libacme_client.a" -headers "$H" \

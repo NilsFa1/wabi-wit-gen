@@ -1,7 +1,7 @@
 name: acme_client
 description: >-
   Acme client SDK for Dart and Flutter. Generated from wit/client.wit plus a
-  generic dart:ffi runtime; works with any core implementing abi/acme_client.h.
+  generic dart:ffi runtime; works with any core implementing the Acme native ABI (abi/acme_abi.h).
 version: 0.1.0
 publish_to: none
 

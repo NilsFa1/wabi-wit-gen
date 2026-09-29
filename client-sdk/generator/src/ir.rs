@@ -107,6 +107,13 @@ impl Model {
         format!("{}:{}@{}", self.namespace, self.package, self.version)
     }
 
+    /// Symbol prefix of this package's ABI exports and library name:
+    /// `acme:client` -> `acme_client` (`acme_client_call_sync`, `libacme_client.so`).
+    /// Unique per WIT package, so several packages can share one process/binary.
+    pub fn symbol_prefix(&self) -> String {
+        format!("{}_{}", crate::names::snake(&self.namespace), crate::names::snake(&self.package))
+    }
+
     pub fn version_triple(&self) -> (u32, u32, u32) {
         let mut it = self.version.split('.').map(|p| p.parse::<u32>().unwrap_or(0));
         (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0))

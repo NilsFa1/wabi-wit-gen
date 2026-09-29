@@ -1,4 +1,4 @@
-//! Rust mirror of the C types in abi/acme_client.h. Only `#[repr(C)]`
+//! Rust mirror of the C types in abi/acme_abi.h. Only `#[repr(C)]`
 //! structs and fixed-width integers — nothing Rust-specific crosses the ABI.
 #![allow(non_camel_case_types)]
 

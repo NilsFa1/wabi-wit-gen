@@ -58,7 +58,7 @@ declare -a SUMMARY=()
 run() { # name, command...
   local name="$1"; shift
   if "$@" > "$B/last.log" 2>&1; then SUMMARY+=("PASS  $name"); else SUMMARY+=("FAIL  $name"); cat "$B/last.log"; fi
-  grep -E "passed|checks" "$B/last.log" | tail -1 | sed 's/^/        /'
+  { grep -E "passed|checks" "$B/last.log" || true; } | tail -1 | sed 's/^/        /'
 }
 
 for core in ${CORES:-rust go zig csharp}; do
@@ -75,6 +75,19 @@ for core in ${CORES:-rust go zig csharp}; do
       java -Dacme.binding=jni -Dacme.jni.lib="$B/java/libacme_jni.so" -cp "$B/java/acme-client.jar:$B/java/tests" AcmeClientTests $flag
   [ $HAVE_DART = 1 ] && run "$core / Dart SDK tests" dart_tests "$lib" "$prof"
 done
+
+# Two packages (Rust core as acme_client, Zig core rebuilt as geo_lib) statically
+# linked into ONE binary: only possible because of per-package symbol prefixes.
+if have_zig; then
+  M="$B/multi" && rm -rf "$M" && mkdir -p "$M/zig"
+  cp "$ROOT/alt-cores/zig/acme_core.zig" "$M/zig/" && printf 'pub const value = "geo_lib";\n' > "$M/zig/acme_prefix.zig"
+  (cd "$M/zig" && zigc build-lib -lc -O ReleaseSafe -fPIC -fcompiler-rt acme_core.zig -femit-bin=../libgeo_lib.a && rm -f ./*.o)
+  (cd "$ROOT/core-rust" && cargo build --release --lib --quiet)
+  RUST_A="${CARGO_TARGET_DIR:-$ROOT/core-rust/target}/release/libacme_client.a"
+  gcc -std=gnu11 -Wall -Wextra -Werror -O1 -I"$ROOT/abi" -I"$ROOT/generated/c" -o "$M/multi_package" \
+    "$ROOT/tests/abi/multi_package.c" "$RUST_A" "$M/libgeo_lib.a" -lpthread -ldl -lm
+  run "rust+zig / two packages in one static binary" "$M/multi_package"
+fi
 
 echo; echo "== compatibility matrix"
 printf '%s\n' "${SUMMARY[@]}"

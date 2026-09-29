@@ -11,6 +11,8 @@ namespace Acme.Client.Runtime;
 public static class Contract
 {
     public const string Id = "acme:client@1.0.0";
+    /// <summary>Prefix of this package's ABI symbols (`acme_client_call_sync`, ...) and library name (`acme_client`).</summary>
+    public const string SymbolPrefix = "acme_client_";
     public const string Package = "acme:client";
     public const int Major = 1;
     public const int Minor = 0;
@@ -29,7 +31,7 @@ internal static class MethodIds
     public const uint ClientEvents = 0x0107;
 }
 
-/// <summary>ABI status codes (abi/acme_client.h).</summary>
+/// <summary>ABI status codes (abi/acme_abi.h).</summary>
 public static class AcmeStatus
 {
     public const int Ok = 0;
@@ -81,54 +83,54 @@ internal static unsafe class NativeAbi
     public const uint AbiMajor = 1;
     public const uint AbiMinor = 0;
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_abi_version", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern uint acme_abi_version();
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_abi_capabilities", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern ulong acme_abi_capabilities();
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_contract_id", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern IntPtr acme_contract_id();
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_core_info", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern IntPtr acme_core_info();
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_status_name", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern IntPtr acme_status_name(int status);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_buffer_free", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern void acme_buffer_free(AcmeBuffer buffer);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_call_sync", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_call_sync(ulong @object, uint methodId, AcmeBytes request, AcmeBuffer* outResponse);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_call_async", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_call_async(ulong @object, uint methodId, AcmeBytes request, ulong* outFuture);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_object_drop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_object_drop(ulong @object);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_future_subscribe", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_future_subscribe(ulong future, IntPtr callback, IntPtr userData);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_future_poll", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_future_poll(ulong future);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_future_take", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_future_take(ulong future, AcmeBuffer* outResult);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_future_cancel", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_future_cancel(ulong future);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_future_drop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_future_drop(ulong future);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_stream_next", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_stream_next(ulong stream, ulong* outFuture);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_stream_cancel", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_stream_cancel(ulong stream);
 
-    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    [DllImport(Library, EntryPoint = "acme_client_stream_drop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_stream_drop(ulong stream);
 }

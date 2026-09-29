@@ -1,5 +1,7 @@
-//! The `extern "C"` surface of abi/acme_client.h. This is the ONLY file in the
-//! Rust core that exports symbols. Every entry point:
+//! The generic implementation of the 17 functions of abi/acme_abi_functions.h.
+//! Nothing here is exported directly: the generated `generated::exports`
+//! module exports them under the package's symbol prefix
+//! (`acme_client_call_sync`, ...) and forwards here. Every entry point:
 //!   * validates pointers and handles (never trusts the host),
 //!   * catches panics (unwinding across `extern "C"` would be UB),
 //!   * writes out-parameters on every path.
@@ -47,12 +49,10 @@ fn resolve_object(h: u64) -> Result<Option<ObjectRef>, AbiError> {
 
 // ---------------------------------------------------------------- metadata
 
-#[no_mangle]
 pub extern "C" fn acme_abi_version() -> u32 {
     ACME_ABI_VERSION
 }
 
-#[no_mangle]
 pub extern "C" fn acme_abi_capabilities() -> u64 {
     ACME_CAP_SYNC_CALLS
         | ACME_CAP_ASYNC_CALLS
@@ -62,17 +62,14 @@ pub extern "C" fn acme_abi_capabilities() -> u64 {
         | ACME_CAP_PAYLOAD_MSGPACK_1
 }
 
-#[no_mangle]
 pub extern "C" fn acme_contract_id() -> *const c_char {
     generated::CONTRACT_ID_C.as_ptr()
 }
 
-#[no_mangle]
 pub extern "C" fn acme_core_info() -> *const c_char {
     c"acme-rust-core/0.1.0 (tokio)".as_ptr()
 }
 
-#[no_mangle]
 pub extern "C" fn acme_status_name(status: acme_status) -> *const c_char {
     let s: &'static CStr = match status {
         ACME_OK => c"ACME_OK",
@@ -96,7 +93,6 @@ pub extern "C" fn acme_status_name(status: acme_status) -> *const c_char {
 
 /// # Safety
 /// `buffer` must have been returned by this library and not freed before.
-#[no_mangle]
 pub unsafe extern "C" fn acme_buffer_free(buffer: acme_buffer) {
     let _ = catch_unwind(AssertUnwindSafe(|| buffer.free()));
 }
@@ -105,7 +101,6 @@ pub unsafe extern "C" fn acme_buffer_free(buffer: acme_buffer) {
 
 /// # Safety
 /// `request` must be readable for `len` bytes; `out_response` writable.
-#[no_mangle]
 pub unsafe extern "C" fn acme_call_sync(
     object: u64,
     method_id: u32,
@@ -132,7 +127,6 @@ pub unsafe extern "C" fn acme_call_sync(
 
 /// # Safety
 /// `request` must be readable for `len` bytes; `out_future` writable.
-#[no_mangle]
 pub unsafe extern "C" fn acme_call_async(
     object: u64,
     method_id: u32,
@@ -169,7 +163,6 @@ pub unsafe extern "C" fn acme_call_async(
     })
 }
 
-#[no_mangle]
 pub extern "C" fn acme_object_drop(object: u64) -> acme_status {
     guard(|| match handles::remove(object, KIND_OBJECT) {
         Some(Entry::Object(mut o)) => {
@@ -186,7 +179,6 @@ pub extern "C" fn acme_object_drop(object: u64) -> acme_status {
 
 /// # Safety
 /// `callback`/`user_data` must stay valid until the callback has been invoked.
-#[no_mangle]
 pub unsafe extern "C" fn acme_future_subscribe(
     future: u64,
     callback: acme_future_callback,
@@ -201,14 +193,12 @@ pub unsafe extern "C" fn acme_future_subscribe(
     })
 }
 
-#[no_mangle]
 pub extern "C" fn acme_future_poll(future: u64) -> acme_status {
     guard(|| handles::future(future).map(|f| f.poll()).unwrap_or(ACME_ERR_INVALID_HANDLE))
 }
 
 /// # Safety
 /// `out_result` must be writable.
-#[no_mangle]
 pub unsafe extern "C" fn acme_future_take(future: u64, out_result: *mut acme_buffer) -> acme_status {
     if out_result.is_null() {
         return ACME_ERR_INVALID_ARGUMENT;
@@ -224,7 +214,6 @@ pub unsafe extern "C" fn acme_future_take(future: u64, out_result: *mut acme_buf
     })
 }
 
-#[no_mangle]
 pub extern "C" fn acme_future_cancel(future: u64) -> acme_status {
     guard(|| match handles::future(future) {
         Some(f) => {
@@ -235,7 +224,6 @@ pub extern "C" fn acme_future_cancel(future: u64) -> acme_status {
     })
 }
 
-#[no_mangle]
 pub extern "C" fn acme_future_drop(future: u64) -> acme_status {
     guard(|| match handles::remove(future, KIND_FUTURE) {
         Some(Entry::Future(f)) => {
@@ -250,7 +238,6 @@ pub extern "C" fn acme_future_drop(future: u64) -> acme_status {
 
 /// # Safety
 /// `out_future` must be writable.
-#[no_mangle]
 pub unsafe extern "C" fn acme_stream_next(stream: u64, out_future: *mut u64) -> acme_status {
     if out_future.is_null() {
         return ACME_ERR_INVALID_ARGUMENT;
@@ -268,7 +255,6 @@ pub unsafe extern "C" fn acme_stream_next(stream: u64, out_future: *mut u64) -> 
     })
 }
 
-#[no_mangle]
 pub extern "C" fn acme_stream_cancel(stream: u64) -> acme_status {
     guard(|| match handles::stream(stream) {
         Some(s) => {
@@ -279,7 +265,6 @@ pub extern "C" fn acme_stream_cancel(stream: u64) -> acme_status {
     })
 }
 
-#[no_mangle]
 pub extern "C" fn acme_stream_drop(stream: u64) -> acme_status {
     guard(|| match handles::remove(stream, KIND_STREAM) {
         Some(Entry::Stream(s)) => {

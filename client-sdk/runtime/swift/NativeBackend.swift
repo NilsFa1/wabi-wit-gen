@@ -1,5 +1,5 @@
 // Hand-written, generic: executes contract calls through the Acme native ABI
-// (C module `CAcmeClient`, i.e. abi/acme_client.h). No per-method code here.
+// (C module `CAcmeClient`: abi/acme_abi.h + generated/c/acme_client.h). No per-method code here.
 
 import CAcmeClient
 

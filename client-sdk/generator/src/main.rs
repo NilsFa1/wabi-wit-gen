@@ -4,7 +4,8 @@
 //!
 //! Reads   wit/*.wit, wit/abi-ids.lock
 //! Writes  wit/abi-ids.lock                 (append-only id allocation)
-//!         core-rust/src/generated/mod.rs   (Rust core: types, codec, dispatch)
+//!         core-rust/src/generated/mod.rs   (Rust core: types, codec, dispatch, prefixed exports)
+//!         generated/c/<prefix>.h           (C view of the package's ABI symbols)
 //!         generated/csharp/*.g.cs          (C# SDK surface + P/Invoke table)
 //!         generated/java/**/*.java         (Java SDK surface + Panama FFM table)
 //!         generated/swift/*.swift          (Swift SDK surface)
@@ -54,10 +55,11 @@ fn main() -> Result<()> {
     let (pkg, _) = resolve.push_dir(&wit_dir)?;
     let model = ir::build(&resolve, pkg, &mut lock)?;
 
-    abi_table::check_header(&root.join("abi/acme_client.h"))?;
+    abi_table::check_header(&root.join("abi"))?;
 
     let mut outputs: Vec<(PathBuf, String)> = vec![(lock_path, lock.render())];
     outputs.push((root.join("core-rust/src/generated/mod.rs"), gen_rust::emit(&model)));
+    outputs.push((root.join(format!("generated/c/{}.h", model.symbol_prefix())), abi_table::emit_c_header(&model)));
     for (name, text) in gen_csharp::emit(&model) {
         outputs.push((root.join("generated/csharp").join(name), text));
     }

@@ -9,7 +9,7 @@
 //!   crypto/     HMAC-SHA256 challenge/response
 //!   mock/       mock backend (tests, examples)
 //!   generated/  types + codec + dispatch, generated from wit/client.wit
-//!   ffi/        generic native ABI adapter (abi/acme_client.h)
+//!   ffi/        generic native ABI adapter (abi/acme_abi_functions.h)
 //! ```
 
 pub mod api;

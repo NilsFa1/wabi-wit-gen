@@ -61,10 +61,11 @@ final class CoreInfo {
   static CoreInfo probe(String libraryPath) {
     final lib = NativeBackend._open(libraryPath);
     try {
-      final version = lib.lookupFunction<Uint32 Function(), int Function()>('acme_abi_version');
-      final caps = lib.lookupFunction<Uint64 Function(), int Function()>('acme_abi_capabilities');
-      final contract = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('acme_contract_id');
-      final core = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('acme_core_info');
+      const p = Contract.symbolPrefix; // acme_client_abi_version, ... (ABI.md §1.1)
+      final version = lib.lookupFunction<Uint32 Function(), int Function()>('${p}abi_version');
+      final caps = lib.lookupFunction<Uint64 Function(), int Function()>('${p}abi_capabilities');
+      final contract = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('${p}contract_id');
+      final core = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('${p}core_info');
       return CoreInfo(version(), caps(), contract().toDartString(), core().toDartString());
     } on ArgumentError catch (e) {
       throw AcmeIncompatibleLibraryException('$libraryPath is not an Acme core: ${e.message}');
@@ -103,9 +104,10 @@ final class NativeBackend implements ClientBackend {
     final env = Platform.environment[libraryVariable];
     if (env != null && env.isNotEmpty) return env;
     if (Platform.isIOS) return null; // DynamicLibrary.process()
-    if (Platform.isMacOS) return 'libacme_client.dylib';
-    if (Platform.isWindows) return 'acme_client.dll';
-    return 'libacme_client.so';
+    const name = Contract.library; // derived from the WIT package, e.g. acme_client
+    if (Platform.isMacOS) return 'lib$name.dylib';
+    if (Platform.isWindows) return '$name.dll';
+    return 'lib$name.so';
   }
 
   static DynamicLibrary _open(String? path) {

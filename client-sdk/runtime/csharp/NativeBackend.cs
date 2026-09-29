@@ -270,10 +270,11 @@ public sealed record CoreInfo(uint AbiVersion, AcmeCapabilities Capabilities, st
         var lib = NativeLibrary.Load(libraryPath);
         try
         {
-            var version = ((delegate* unmanaged[Cdecl]<uint>)NativeLibrary.GetExport(lib, "acme_abi_version"))();
-            var caps = ((delegate* unmanaged[Cdecl]<ulong>)NativeLibrary.GetExport(lib, "acme_abi_capabilities"))();
-            var contract = ((delegate* unmanaged[Cdecl]<IntPtr>)NativeLibrary.GetExport(lib, "acme_contract_id"))();
-            var info = ((delegate* unmanaged[Cdecl]<IntPtr>)NativeLibrary.GetExport(lib, "acme_core_info"))();
+            // Symbols carry this package's prefix (acme_client_abi_version, ...), ABI.md §1.1.
+            var version = ((delegate* unmanaged[Cdecl]<uint>)NativeLibrary.GetExport(lib, Contract.SymbolPrefix + "abi_version"))();
+            var caps = ((delegate* unmanaged[Cdecl]<ulong>)NativeLibrary.GetExport(lib, Contract.SymbolPrefix + "abi_capabilities"))();
+            var contract = ((delegate* unmanaged[Cdecl]<IntPtr>)NativeLibrary.GetExport(lib, Contract.SymbolPrefix + "contract_id"))();
+            var info = ((delegate* unmanaged[Cdecl]<IntPtr>)NativeLibrary.GetExport(lib, Contract.SymbolPrefix + "core_info"))();
             return new CoreInfo(version, (AcmeCapabilities)caps, Marshal.PtrToStringUTF8(contract) ?? "", Marshal.PtrToStringUTF8(info) ?? "");
         }
         finally

@@ -6,9 +6,13 @@ cd "$ROOT"
 echo "== generator: unit tests + generated code up to date"
 (cd generator && cargo test --quiet)
 (cd generator && cargo run --quiet -- --root .. --check)
-echo "== header compiles as C99 and C++11"
-gcc -std=c99 -pedantic -Wall -Werror -fsyntax-only -x c abi/acme_client.h
-g++ -std=c++11 -Wall -Werror -fsyntax-only -x c++ abi/acme_client.h
+echo "== headers compile as C99 and C++11 (generic ABI + generated per-package header)"
+for h in abi/acme_abi.h generated/c/*.h; do
+  gcc -std=c99 -pedantic -Wall -Werror -fsyntax-only -Iabi -x c "$h"
+  g++ -std=c++11 -Wall -Werror -fsyntax-only -Iabi -x c++ "$h"
+done
+printf '#define ACME_PREFIX a_b\n#include "acme_abi_functions.h"\n#undef ACME_PREFIX\n#define ACME_PREFIX c_d\n#include "acme_abi_functions.h"\n' \
+  | gcc -std=c99 -pedantic -Wall -Werror -fsyntax-only -Iabi -x c -
 echo "== rust core: unit + integration tests (incl. real WebSocket)"
 (cd core-rust && cargo test --quiet)
 echo "== compatibility matrix"

@@ -22,8 +22,8 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
     for r in &m.resources {
         files.push((format!("{DIR}/{}.java", class_name(m, r)), resource(m, r)));
     }
-    files.push((format!("{DIR}/runtime/NativeAbi.java"), native_abi()));
-    files.push((format!("{DIR}/runtime/AbiConstants.java"), abi_constants()));
+    files.push((format!("{DIR}/runtime/NativeAbi.java"), native_abi(m)));
+    files.push((format!("{DIR}/runtime/AbiConstants.java"), abi_constants(m)));
     files.push((format!("{DIR}/runtime/Contract.java"), contract(m)));
     files
 }
@@ -485,13 +485,15 @@ fn request_ind(o: &mut String, params: &[(String, Ty)], ind: &str) {
 }
 
 /// Plain constants (no java.lang.foreign), shared by the Panama and JNI backends.
-fn abi_constants() -> String {
+fn abi_constants(m: &Model) -> String {
     let mut o = header(&format!("{PKG}.runtime"));
-    w!(o, "/** Status codes, capability bits and version of the Acme native ABI (abi/acme_client.h). */");
+    w!(o, "/** Status codes, capability bits and version of the Acme native ABI (abi/acme_abi.h). */");
     w!(o, "public final class AbiConstants {{");
     w!(o, "    private AbiConstants() {{}}");
     w!(o, "");
-    w!(o, "    public static final String LIBRARY = \"acme_client\";");
+    w!(o, "    /** Library name and prefix of this package's ABI symbols ({0}_call_sync, ...). */", m.symbol_prefix());
+    w!(o, "    public static final String LIBRARY = \"{}\";", m.symbol_prefix());
+    w!(o, "    public static final String SYMBOL_PREFIX = \"{}_\";", m.symbol_prefix());
     w!(o, "    public static final int ABI_MAJOR = {};", abi_table::ABI_MAJOR);
     w!(o, "    public static final int ABI_MINOR = {};", abi_table::ABI_MINOR);
     w!(o, "");
@@ -526,14 +528,14 @@ fn jtype(t: CTy) -> &'static str {
     }
 }
 
-fn native_abi() -> String {
+fn native_abi(m: &Model) -> String {
     let mut o = header(&format!("{PKG}.runtime"));
     w!(o, "import java.lang.foreign.*;");
     w!(o, "import java.lang.invoke.MethodHandle;");
     w!(o, "import static java.lang.foreign.ValueLayout.*;");
     w!(o, "");
     w!(o, "/**");
-    w!(o, " * Panama FFM bindings of the generic Acme native ABI {}.{} (abi/acme_client.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
+    w!(o, " * Panama FFM bindings of the generic Acme native ABI {}.{} (abi/acme_abi.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
     w!(o, " * Java 22+ only; Android and older JVMs use the JNI backend instead.");
     w!(o, " * This list does not grow when WIT functions are added: those are addressed by method id.");
     w!(o, " */");
@@ -562,7 +564,7 @@ fn native_abi() -> String {
             a.extend(args);
             format!("FunctionDescriptor.of({})", a.join(", "))
         };
-        w!(o, "        {} = linker.downcallHandle(find(lookup, \"{}\"), {desc});", f.name, f.name);
+        w!(o, "        {} = linker.downcallHandle(find(lookup, \"{}\"), {desc});", f.name, abi_table::symbol(&m.symbol_prefix(), f.name));
     }
     w!(o, "    }}");
     w!(o, "");

@@ -41,7 +41,8 @@ final class JniAbi implements AbiCalls {
 
         private static long openLib(String path, boolean metadataOnly) {
             var error = new String[1];
-            long lib = nOpen(path != null ? path : System.mapLibraryName(AbiConstants.LIBRARY), metadataOnly, error);
+            long lib = nOpen(path != null ? path : System.mapLibraryName(AbiConstants.LIBRARY),
+                    AbiConstants.SYMBOL_PREFIX, metadataOnly, error);
             if (lib == 0) throw new AcmeIncompatibleLibraryException(error[0]);
             return lib;
         }
@@ -150,7 +151,8 @@ final class JniAbi implements AbiCalls {
     // ----------------------------------------------------------- natives
     // `lib` is an opaque pointer to the shim's function table for one core.
 
-    static native long nOpen(String path, boolean metadataOnly, String[] error);
+    /** {@code symbolPrefix}: e.g. "acme_client_" — the shim itself is package-agnostic. */
+    static native long nOpen(String path, String symbolPrefix, boolean metadataOnly, String[] error);
     static native void nClose(long lib);
     static native int nAbiVersion(long lib);
     static native long nCapabilities(long lib);

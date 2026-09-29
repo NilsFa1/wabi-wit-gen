@@ -6,6 +6,9 @@ public enum Contract {
     public static let package = "acme:client"
     public static let major = 1
     public static let minor = 0
+    /// Library name and prefix of this package's ABI symbols (acme_client_call_sync, ...).
+    public static let library = "acme_client"
+    public static let symbolPrefix = "acme_client_"
 }
 
 /// Stable method ids (wit/abi-ids.lock).
@@ -20,7 +23,7 @@ enum MethodIds {
     static let clientEvents: UInt32 = 0x0107
 }
 
-/// ABI 1.0 status codes and capability bits (mirrors abi/acme_client.h).
+/// ABI 1.0 status codes and capability bits (mirrors abi/acme_abi.h).
 public enum AcmeAbi {
     public static let major: UInt32 = 1
     public static let minor: UInt32 = 0

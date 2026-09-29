@@ -1,14 +1,14 @@
 package main
 
-// Go ABI adapter: implements abi/acme_client.h with cgo. This file replaces
+// Go ABI adapter: implements abi/acme_abi_functions.h with cgo, under the
+// package symbol prefix acme_client_ (ABI.md §1.1). This file replaces
 // core-rust/src/ffi — nothing on the SDK side changes.
 //
 //   go build -buildmode=c-shared -o libacme_client.so .
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../abi
-#define ACME_CLIENT_NO_PROTOTYPES
-#include "acme_client.h"
+#include "acme_abi.h" // types only; cgo generates the prototypes of the //export functions
 #include <stdlib.h>
 
 // Go cannot call C function pointers directly.
@@ -270,35 +270,35 @@ func (s *stream) cancel() {
 
 // ------------------------------------------------------------------ exports
 
-//export acme_abi_version
-func acme_abi_version() C.uint32_t { return abiVersion }
+//export acme_client_abi_version
+func acme_client_abi_version() C.uint32_t { return abiVersion }
 
-//export acme_abi_capabilities
-func acme_abi_capabilities() C.uint64_t { return capabilities }
+//export acme_client_abi_capabilities
+func acme_client_abi_capabilities() C.uint64_t { return capabilities }
 
-//export acme_contract_id
-func acme_contract_id() *C.char { return contractID }
+//export acme_client_contract_id
+func acme_client_contract_id() *C.char { return contractID }
 
-//export acme_core_info
-func acme_core_info() *C.char { return coreInfo }
+//export acme_client_core_info
+func acme_client_core_info() *C.char { return coreInfo }
 
-//export acme_status_name
-func acme_status_name(status C.acme_status) *C.char {
+//export acme_client_status_name
+func acme_client_status_name(status C.acme_status) *C.char {
 	if s, ok := statusStrs[int32(status)]; ok {
 		return s
 	}
 	return statusStrs[1000]
 }
 
-//export acme_buffer_free
-func acme_buffer_free(b C.acme_buffer) {
+//export acme_client_buffer_free
+func acme_client_buffer_free(b C.acme_buffer) {
 	if b.ptr != nil {
 		C.free(unsafe.Pointer(b.ptr))
 	}
 }
 
-//export acme_call_sync
-func acme_call_sync(object C.uint64_t, method C.uint32_t, request C.acme_bytes, out *C.acme_buffer) (status C.acme_status) {
+//export acme_client_call_sync
+func acme_client_call_sync(object C.uint64_t, method C.uint32_t, request C.acme_bytes, out *C.acme_buffer) (status C.acme_status) {
 	if out == nil {
 		return errInvalidArgument
 	}
@@ -318,8 +318,8 @@ func acme_call_sync(object C.uint64_t, method C.uint32_t, request C.acme_bytes, 
 	return C.acme_status(st)
 }
 
-//export acme_call_async
-func acme_call_async(object C.uint64_t, method C.uint32_t, request C.acme_bytes, out *C.uint64_t) C.acme_status {
+//export acme_client_call_async
+func acme_client_call_async(object C.uint64_t, method C.uint32_t, request C.acme_bytes, out *C.uint64_t) C.acme_status {
 	if out == nil {
 		return errInvalidArgument
 	}
@@ -345,8 +345,8 @@ func acme_call_async(object C.uint64_t, method C.uint32_t, request C.acme_bytes,
 	return statusOK
 }
 
-//export acme_object_drop
-func acme_object_drop(object C.uint64_t) C.acme_status {
+//export acme_client_object_drop
+func acme_client_object_drop(object C.uint64_t) C.acme_status {
 	c, ok := remove[*client](uint64(object))
 	if !ok {
 		return errInvalidHandle
@@ -355,8 +355,8 @@ func acme_object_drop(object C.uint64_t) C.acme_status {
 	return statusOK
 }
 
-//export acme_future_subscribe
-func acme_future_subscribe(h C.uint64_t, cb C.acme_future_callback, ud unsafe.Pointer) C.acme_status {
+//export acme_client_future_subscribe
+func acme_client_future_subscribe(h C.uint64_t, cb C.acme_future_callback, ud unsafe.Pointer) C.acme_status {
 	if cb == nil {
 		return errInvalidArgument
 	}
@@ -377,8 +377,8 @@ func acme_future_subscribe(h C.uint64_t, cb C.acme_future_callback, ud unsafe.Po
 	return statusOK
 }
 
-//export acme_future_poll
-func acme_future_poll(h C.uint64_t) C.acme_status {
+//export acme_client_future_poll
+func acme_client_future_poll(h C.uint64_t) C.acme_status {
 	f, ok := lookup[*future](uint64(h))
 	if !ok {
 		return errInvalidHandle
@@ -391,8 +391,8 @@ func acme_future_poll(h C.uint64_t) C.acme_status {
 	return statusPending
 }
 
-//export acme_future_take
-func acme_future_take(h C.uint64_t, out *C.acme_buffer) C.acme_status {
+//export acme_client_future_take
+func acme_client_future_take(h C.uint64_t, out *C.acme_buffer) C.acme_status {
 	if out == nil {
 		return errInvalidArgument
 	}
@@ -415,8 +415,8 @@ func acme_future_take(h C.uint64_t, out *C.acme_buffer) C.acme_status {
 	return C.acme_status(f.status)
 }
 
-//export acme_future_cancel
-func acme_future_cancel(h C.uint64_t) C.acme_status {
+//export acme_client_future_cancel
+func acme_client_future_cancel(h C.uint64_t) C.acme_status {
 	f, ok := lookup[*future](uint64(h))
 	if !ok {
 		return errInvalidHandle
@@ -425,8 +425,8 @@ func acme_future_cancel(h C.uint64_t) C.acme_status {
 	return statusOK
 }
 
-//export acme_future_drop
-func acme_future_drop(h C.uint64_t) C.acme_status {
+//export acme_client_future_drop
+func acme_client_future_drop(h C.uint64_t) C.acme_status {
 	f, ok := remove[*future](uint64(h))
 	if !ok {
 		return errInvalidHandle
@@ -435,8 +435,8 @@ func acme_future_drop(h C.uint64_t) C.acme_status {
 	return statusOK
 }
 
-//export acme_stream_next
-func acme_stream_next(h C.uint64_t, out *C.uint64_t) C.acme_status {
+//export acme_client_stream_next
+func acme_client_stream_next(h C.uint64_t, out *C.uint64_t) C.acme_status {
 	if out == nil {
 		return errInvalidArgument
 	}
@@ -450,8 +450,8 @@ func acme_stream_next(h C.uint64_t, out *C.uint64_t) C.acme_status {
 	return C.acme_status(st)
 }
 
-//export acme_stream_cancel
-func acme_stream_cancel(h C.uint64_t) C.acme_status {
+//export acme_client_stream_cancel
+func acme_client_stream_cancel(h C.uint64_t) C.acme_status {
 	s, ok := lookup[*stream](uint64(h))
 	if !ok {
 		return errInvalidHandle
@@ -460,8 +460,8 @@ func acme_stream_cancel(h C.uint64_t) C.acme_status {
 	return statusOK
 }
 
-//export acme_stream_drop
-func acme_stream_drop(h C.uint64_t) C.acme_status {
+//export acme_client_stream_drop
+func acme_client_stream_drop(h C.uint64_t) C.acme_status {
 	s, ok := remove[*stream](uint64(h))
 	if !ok {
 		return errInvalidHandle

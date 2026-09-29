@@ -2,8 +2,9 @@
  * libacme_jni — generic JNI shim for the Acme Java SDK (Android, JDK 17+).
  *
  * Hand-written, contract-agnostic: it knows the 17 ABI functions of
- * abi/acme_client.h and nothing about customers, clients or method ids.
- * New WIT functions never require changes here.
+ * abi/acme_abi_functions.h and nothing about customers, clients or method ids.
+ * The package's symbol prefix ("acme_client_") is passed in at run time, so
+ * one shim serves every WIT package. New WIT functions never require changes.
  *
  *   Java (JniAbi)  --JNI-->  libacme_jni  --dlopen/function table-->  libacme_client (Rust/Go/Zig/...)
  *
@@ -17,8 +18,7 @@
  * exits (pthread key destructor; per call on Windows). Android aborts if a
  * thread exits while still attached, which this avoids.
  */
-#define ACME_CLIENT_NO_PROTOTYPES
-#include "acme_client.h"
+#include "acme_abi.h" /* types only; symbols are resolved by name at run time */
 
 #include <jni.h>
 #include <stdint.h>
@@ -161,10 +161,12 @@ static void unborrow(JNIEnv *env, borrowed *b) {
 
 #define JNI_FN(ret, name) JNIEXPORT ret JNICALL Java_com_acme_client_runtime_JniAbi_##name
 
-JNI_FN(jlong, nOpen)(JNIEnv *env, jclass c, jstring jpath, jboolean metadata_only, jobjectArray error) {
+JNI_FN(jlong, nOpen)(JNIEnv *env, jclass c, jstring jpath, jstring jprefix, jboolean metadata_only, jobjectArray error) {
     (void)c;
     char msg[512];
+    char sym[256];
     const char *path = (*env)->GetStringUTFChars(env, jpath, NULL);
+    const char *prefix = (*env)->GetStringUTFChars(env, jprefix, NULL);
     acme_lib *lib = calloc(1, sizeof *lib);
     lib->handle = LIB_OPEN(path);
     if (!lib->handle) {
@@ -175,37 +177,41 @@ JNI_FN(jlong, nOpen)(JNIEnv *env, jclass c, jstring jpath, jboolean metadata_onl
 #endif
         goto fail;
     }
+/* <prefix><name>, e.g. "acme_client_" + "call_sync" (ABI.md §1.1) */
 #define SYM(field, name)                                                                   \
-    if (!(*(void **)&lib->field = LIB_SYM(lib->handle, name))) {                            \
-        snprintf(msg, sizeof msg, "%s is not a compatible Acme core: missing symbol %s", path, name); \
+    snprintf(sym, sizeof sym, "%s%s", prefix, name);                                       \
+    if (!(*(void **)&lib->field = LIB_SYM(lib->handle, sym))) {                             \
+        snprintf(msg, sizeof msg, "%s is not a compatible core for this package: missing symbol %s", path, sym); \
         goto fail;                                                                         \
     }
-    SYM(abi_version, "acme_abi_version")
-    SYM(abi_capabilities, "acme_abi_capabilities")
-    SYM(contract_id, "acme_contract_id")
-    SYM(core_info, "acme_core_info")
+    SYM(abi_version, "abi_version")
+    SYM(abi_capabilities, "abi_capabilities")
+    SYM(contract_id, "contract_id")
+    SYM(core_info, "core_info")
     if (!metadata_only) {
-        SYM(status_name, "acme_status_name")
-        SYM(buffer_free, "acme_buffer_free")
-        SYM(call_sync, "acme_call_sync")
-        SYM(call_async, "acme_call_async")
-        SYM(object_drop, "acme_object_drop")
-        SYM(future_subscribe, "acme_future_subscribe")
-        SYM(future_poll, "acme_future_poll")
-        SYM(future_take, "acme_future_take")
-        SYM(future_cancel, "acme_future_cancel")
-        SYM(future_drop, "acme_future_drop")
-        SYM(stream_next, "acme_stream_next")
-        SYM(stream_cancel, "acme_stream_cancel")
-        SYM(stream_drop, "acme_stream_drop")
+        SYM(status_name, "status_name")
+        SYM(buffer_free, "buffer_free")
+        SYM(call_sync, "call_sync")
+        SYM(call_async, "call_async")
+        SYM(object_drop, "object_drop")
+        SYM(future_subscribe, "future_subscribe")
+        SYM(future_poll, "future_poll")
+        SYM(future_take, "future_take")
+        SYM(future_cancel, "future_cancel")
+        SYM(future_drop, "future_drop")
+        SYM(stream_next, "stream_next")
+        SYM(stream_cancel, "stream_cancel")
+        SYM(stream_drop, "stream_drop")
     }
 #undef SYM
     (*env)->ReleaseStringUTFChars(env, jpath, path);
+    (*env)->ReleaseStringUTFChars(env, jprefix, prefix);
     return (jlong)(intptr_t)lib;
 fail:
     if (lib->handle) LIB_CLOSE(lib->handle);
     free(lib);
     (*env)->ReleaseStringUTFChars(env, jpath, path);
+    (*env)->ReleaseStringUTFChars(env, jprefix, prefix);
     (*env)->SetObjectArrayElement(env, error, 0, (*env)->NewStringUTF(env, msg));
     return 0;
 }

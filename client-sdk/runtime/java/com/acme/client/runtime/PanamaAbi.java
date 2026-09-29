@@ -32,11 +32,12 @@ final class PanamaAbi implements AbiCalls {
             var lookup = lookup(path);
             var linker = Linker.nativeLinker();
             try {
-                int version = (int) linker.downcallHandle(find(lookup, "acme_abi_version"), FunctionDescriptor.of(JAVA_INT)).invokeExact();
-                long caps = (long) linker.downcallHandle(find(lookup, "acme_abi_capabilities"), FunctionDescriptor.of(JAVA_LONG)).invokeExact();
+                String p = AbiConstants.SYMBOL_PREFIX; // acme_client_abi_version, ... (ABI.md §1.1)
+                int version = (int) linker.downcallHandle(find(lookup, p + "abi_version"), FunctionDescriptor.of(JAVA_INT)).invokeExact();
+                long caps = (long) linker.downcallHandle(find(lookup, p + "abi_capabilities"), FunctionDescriptor.of(JAVA_LONG)).invokeExact();
                 var str = FunctionDescriptor.of(ADDRESS);
-                var contract = (MemorySegment) linker.downcallHandle(find(lookup, "acme_contract_id"), str).invokeExact();
-                var info = (MemorySegment) linker.downcallHandle(find(lookup, "acme_core_info"), str).invokeExact();
+                var contract = (MemorySegment) linker.downcallHandle(find(lookup, p + "contract_id"), str).invokeExact();
+                var info = (MemorySegment) linker.downcallHandle(find(lookup, p + "core_info"), str).invokeExact();
                 return new CoreInfo(version, caps, cString(contract), cString(info));
             } catch (AcmeException e) {
                 throw e;

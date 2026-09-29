@@ -1,15 +1,15 @@
 /*
  * ABI conformance suite — language-neutral, runs against ANY core library:
  *
- *   ./conformance path/to/libacme_client.so [--profile full|basic]
+ *   ./conformance path/to/libacme_client.so [--profile full|basic] [--prefix acme_client]
  *
- * It only uses abi/acme_client.h and dlopen(), i.e. exactly what an SDK sees.
+ * It only uses abi/acme_abi.h and dlopen(), i.e. exactly what an SDK sees.
+ * Symbols are looked up as <prefix>_<name> (ABI.md §1.1).
  * "basic" skips tests needing a live backend simulation (used for the
  * minimal Zig stub core).
  */
 #define _GNU_SOURCE
-#define ACME_CLIENT_NO_PROTOTYPES
-#include "../../abi/acme_client.h"
+#include "../../abi/acme_abi.h"
 
 #include <dlfcn.h>
 #include <pthread.h>
@@ -459,21 +459,28 @@ static void t_large_and_unicode(void) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: %s <core library> [--profile full|basic]\n", argv[0]);
+        fprintf(stderr, "usage: %s <core library> [--profile full|basic] [--prefix acme_client]\n", argv[0]);
         return 2;
     }
-    int full = !(argc >= 4 && strcmp(argv[3], "basic") == 0);
+    int full = 1;
+    const char *prefix = "acme_client";
+    for (int i = 2; i + 1 < argc; i += 2) {
+        if (strcmp(argv[i], "--profile") == 0) full = strcmp(argv[i + 1], "basic") != 0;
+        else if (strcmp(argv[i], "--prefix") == 0) prefix = argv[i + 1];
+    }
     void *lib = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     if (!lib) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
-#define SYM(field, name) \
-    if (!(*(void **)&A.field = dlsym(lib, name))) { fprintf(stderr, "missing symbol %s\n", name); return 2; }
-    SYM(abi_version, "acme_abi_version") SYM(abi_capabilities, "acme_abi_capabilities")
-    SYM(contract_id, "acme_contract_id") SYM(core_info, "acme_core_info") SYM(status_name, "acme_status_name")
-    SYM(buffer_free, "acme_buffer_free") SYM(call_sync, "acme_call_sync") SYM(call_async, "acme_call_async")
-    SYM(object_drop, "acme_object_drop") SYM(future_subscribe, "acme_future_subscribe")
-    SYM(future_poll, "acme_future_poll") SYM(future_take, "acme_future_take")
-    SYM(future_cancel, "acme_future_cancel") SYM(future_drop, "acme_future_drop")
-    SYM(stream_next, "acme_stream_next") SYM(stream_cancel, "acme_stream_cancel") SYM(stream_drop, "acme_stream_drop")
+    char sym[256];
+#define SYM(field, name)                                                               \
+    snprintf(sym, sizeof sym, "%s_%s", prefix, name);                                  \
+    if (!(*(void **)&A.field = dlsym(lib, sym))) { fprintf(stderr, "missing symbol %s\n", sym); return 2; }
+    SYM(abi_version, "abi_version") SYM(abi_capabilities, "abi_capabilities")
+    SYM(contract_id, "contract_id") SYM(core_info, "core_info") SYM(status_name, "status_name")
+    SYM(buffer_free, "buffer_free") SYM(call_sync, "call_sync") SYM(call_async, "call_async")
+    SYM(object_drop, "object_drop") SYM(future_subscribe, "future_subscribe")
+    SYM(future_poll, "future_poll") SYM(future_take, "future_take")
+    SYM(future_cancel, "future_cancel") SYM(future_drop, "future_drop")
+    SYM(stream_next, "stream_next") SYM(stream_cancel, "stream_cancel") SYM(stream_drop, "stream_drop")
 
     struct { const char *name; void (*fn)(void); int needs_full; } tests[] = {
         {"metadata", t_metadata, 0},

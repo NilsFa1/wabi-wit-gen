@@ -474,6 +474,8 @@ fn native_abi(m: &Model) -> String {
     w!(o, "public static class Contract");
     w!(o, "{{");
     w!(o, "    public const string Id = \"{}\";", m.contract_id());
+    w!(o, "    /// <summary>Prefix of this package's ABI symbols (`{0}_call_sync`, ...) and library name (`{0}`).</summary>", m.symbol_prefix());
+    w!(o, "    public const string SymbolPrefix = \"{}_\";", m.symbol_prefix());
     w!(o, "    public const string Package = \"{}:{}\";", m.namespace, m.package);
     w!(o, "    public const int Major = {maj};");
     w!(o, "    public const int Minor = {min};");
@@ -489,7 +491,7 @@ fn native_abi(m: &Model) -> String {
     }
     w!(o, "}}");
     w!(o, "");
-    w!(o, "/// <summary>ABI status codes (abi/acme_client.h).</summary>");
+    w!(o, "/// <summary>ABI status codes (abi/acme_abi.h).</summary>");
     w!(o, "public static class AcmeStatus");
     w!(o, "{{");
     for (n, v) in abi_table::STATUSES {
@@ -525,13 +527,13 @@ fn native_abi(m: &Model) -> String {
     w!(o, "/// grow when WIT functions are added: those are addressed by <see cref=\"MethodIds\"/>.</summary>");
     w!(o, "internal static unsafe class NativeAbi");
     w!(o, "{{");
-    w!(o, "    public const string Library = \"acme_client\";");
+    w!(o, "    public const string Library = \"{}\";", m.symbol_prefix());
     w!(o, "    public const uint AbiMajor = {};", abi_table::ABI_MAJOR);
     w!(o, "    public const uint AbiMinor = {};", abi_table::ABI_MINOR);
     for f in abi_table::FUNCTIONS {
         let ps: Vec<String> = f.params.iter().map(|(t, n)| format!("{} {}", ctype(*t), if KEYWORDS.contains(n) { format!("@{n}") } else { n.to_string() })).collect();
         w!(o, "");
-        w!(o, "    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]");
+        w!(o, "    [DllImport(Library, EntryPoint = \"{}\", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]", abi_table::symbol(&m.symbol_prefix(), f.name));
         w!(o, "    public static extern {} {}({});", ctype(f.ret), f.name, ps.join(", "));
     }
     w!(o, "}}");

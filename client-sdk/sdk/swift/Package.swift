@@ -1,7 +1,7 @@
 // swift-tools-version:5.9
 // Acme Swift SDK = hand-written runtime (Sources/AcmeClient/Runtime -> runtime/swift)
 //                + generated code     (Sources/AcmeClient/Generated -> generated/swift)
-// linked against any core that implements abi/acme_client.h.
+// linked against any core that implements the Acme native ABI (abi/acme_abi.h).
 //
 // Desktop/Linux: `swift build -Xlinker -L<dir with libacme_client>`.
 // iOS: replace the system library with the binary target below

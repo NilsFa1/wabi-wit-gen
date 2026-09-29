@@ -7,6 +7,10 @@ abstract final class Contract {
   static const package = 'acme:client';
   static const major = 1;
   static const minor = 0;
+
+  /// Library name and prefix of this package's ABI symbols (acme_client_call_sync, ...).
+  static const library = 'acme_client';
+  static const symbolPrefix = 'acme_client_';
 }
 
 /// Stable method ids (wit/abi-ids.lock).
@@ -21,7 +25,7 @@ abstract final class MethodIds {
   static const clientEvents = 0x0107;
 }
 
-/// ABI 1.0 status codes (abi/acme_client.h).
+/// ABI 1.0 status codes (abi/acme_abi.h).
 abstract final class AcmeStatus {
   static const ok = 0;
   static const pending = 1;

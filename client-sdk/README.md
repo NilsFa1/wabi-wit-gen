@@ -13,7 +13,7 @@ und dessen **Implementierungssprache austauschbar** bleibt.
  IAsyncEnumerable  Flow.Publisher     AsyncSequence    Stream
       └─────────────────┴───────┬─────────┴─────────────────┘
                               ▼
-                 abi/acme_client.h  (17 Funktionen)       ← stabiles Implementierungsprotokoll
+                 abi/acme_abi.h  (17 Funktionen)          ← stabiles Implementierungsprotokoll
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼
       Rust Core        Go Core        Zig Core       C# Core      ← austauschbar
@@ -124,7 +124,9 @@ mitliefern, Isolates/UI, Beispiel-Widget).
 ```
 wit/client.wit            öffentlicher Vertrag (async func, stream<T>, resource)
 wit/abi-ids.lock          append-only Tabelle aller numerischen Wire-IDs
-abi/acme_client.h         die native ABI (17 Funktionen)
+abi/acme_abi.h            die native ABI: Typen, Status, Capabilities
+abi/acme_abi_functions.h  die 17 Funktionen, pro WIT-Paket unter eigenem Symbol-Präfix
+generated/c/acme_client.h generierter Header des Pakets (acme_client_call_sync, …)
 abi/ABI.md                normative Spezifikation: Ownership, Async, Streams, Threading, Encoding
 generator/                acme-wit-gen (Rust, nutzt wit-parser): WIT → C#, Java, Swift, Rust-Core-Glue
 generated/{csharp,java,swift,dart}   generierter SDK-Code (committed, --check in CI)
@@ -245,10 +247,10 @@ Von `acme-wit-gen`, aus `wit/client.wit` + `wit/abi-ids.lock`:
 * **Lock-Datei:** neue IDs werden angehängt.
 
 Die P/Invoke- und FFM-Tabellen kommen aus einer einzigen ABI-Tabelle im
-Generator, die gegen `acme_client.h` geprüft wird. Sie wachsen nicht mit dem WIT.
+Generator, die gegen `acme_abi.h`/`acme_abi_functions.h` geprüft wird. Sie wachsen nicht mit dem WIT.
 
 ### Was ist handgeschrieben?
-* `wit/client.wit` (der Vertrag), `abi/acme_client.h` + `ABI.md`.
+* `wit/client.wit` (der Vertrag), `abi/acme_abi.h`, `abi/acme_abi_functions.h` + `ABI.md`.
 * Pro Sprache genau eine **generische Runtime** (`runtime/*`): MessagePack,
   Object-Handles, Buffer-Ownership, Future→Task/CompletableFuture/async,
   Stream→IAsyncEnumerable/Flow/AsyncSequence, Cancellation, Fehlerdekodierung,
@@ -263,7 +265,7 @@ Krypto, Handle-Tabelle, Future-Zustandsautomat, Allocator (`Box<[u8]>` /
 `C.malloc` / `c_allocator`) und damit auch `acme_buffer_free`.
 
 ### Was ist ABI-spezifisch?
-`acme_client.h` / `ABI.md`: 17 Funktionen, Status- und Capability-Codes,
+`acme_abi.h` / `acme_abi_functions.h` / `ABI.md`: 17 Funktionen (mit Paket-Präfix), Status- und Capability-Codes,
 Handle-Regeln, Future/Stream-Protokoll, Threading-Regeln, Payload-Encoding v1,
 Method-ID-Schema. Sowohl Cores als auch SDK-Runtimes implementieren das; es ist
 die einzige gemeinsame Abhängigkeit.
@@ -278,7 +280,7 @@ Dart `NativeCallable.listener` + `Completer` + pull-basierter `StreamController`
 Dazu kommen die Namens- und Typabbildung im jeweiligen Emitter des Generators.
 
 ### Was bleibt bei Rust → Go/Zig unverändert?
-**Alles oberhalb der ABI:** `client.wit`, `abi-ids.lock`, `acme_client.h`,
+**Alles oberhalb der ABI:** `client.wit`, `abi-ids.lock`, die ABI-Header,
 der gesamte generierte SDK-Code, die SDK-Runtimes, die Pakete, die Beispiele
 und die Testsuiten, und zwar bis auf die **kompilierten Binaries**. Die
 Matrix lädt dieselbe `Acme.Client.Tests.dll` und dieselbe `acme-client.jar`

@@ -435,3 +435,128 @@ pub fn dispatch_async<I: Implementation>(object: Option<ObjectRef>, method_id: u
         _ => Err(AbiError::UnknownMethod),
     }
 }
+
+/// Exported ABI symbols of package acme:client@1.0.0 (prefix `acme_client_`, ABI.md §1.1).
+pub mod exports {
+    use crate::ffi::abi_types::*;
+    use crate::ffi::exports as adapter;
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_abi_version"]
+    pub unsafe extern "C" fn abi_version() -> u32 {
+        adapter::acme_abi_version()
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_abi_capabilities"]
+    pub unsafe extern "C" fn abi_capabilities() -> u64 {
+        adapter::acme_abi_capabilities()
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_contract_id"]
+    pub unsafe extern "C" fn contract_id() -> *const std::ffi::c_char {
+        adapter::acme_contract_id()
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_core_info"]
+    pub unsafe extern "C" fn core_info() -> *const std::ffi::c_char {
+        adapter::acme_core_info()
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_status_name"]
+    pub unsafe extern "C" fn status_name(status: acme_status) -> *const std::ffi::c_char {
+        adapter::acme_status_name(status)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_buffer_free"]
+    pub unsafe extern "C" fn buffer_free(buffer: acme_buffer) {
+        adapter::acme_buffer_free(buffer)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_call_sync"]
+    pub unsafe extern "C" fn call_sync(object: u64, method_id: u32, request: acme_bytes, out_response: *mut acme_buffer) -> acme_status {
+        adapter::acme_call_sync(object, method_id, request, out_response)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_call_async"]
+    pub unsafe extern "C" fn call_async(object: u64, method_id: u32, request: acme_bytes, out_future: *mut u64) -> acme_status {
+        adapter::acme_call_async(object, method_id, request, out_future)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_object_drop"]
+    pub unsafe extern "C" fn object_drop(object: u64) -> acme_status {
+        adapter::acme_object_drop(object)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_future_subscribe"]
+    pub unsafe extern "C" fn future_subscribe(future: u64, callback: acme_future_callback, user_data: *mut std::ffi::c_void) -> acme_status {
+        adapter::acme_future_subscribe(future, callback, user_data)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_future_poll"]
+    pub unsafe extern "C" fn future_poll(future: u64) -> acme_status {
+        adapter::acme_future_poll(future)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_future_take"]
+    pub unsafe extern "C" fn future_take(future: u64, out_result: *mut acme_buffer) -> acme_status {
+        adapter::acme_future_take(future, out_result)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_future_cancel"]
+    pub unsafe extern "C" fn future_cancel(future: u64) -> acme_status {
+        adapter::acme_future_cancel(future)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_future_drop"]
+    pub unsafe extern "C" fn future_drop(future: u64) -> acme_status {
+        adapter::acme_future_drop(future)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_stream_next"]
+    pub unsafe extern "C" fn stream_next(stream: u64, out_future: *mut u64) -> acme_status {
+        adapter::acme_stream_next(stream, out_future)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_stream_cancel"]
+    pub unsafe extern "C" fn stream_cancel(stream: u64) -> acme_status {
+        adapter::acme_stream_cancel(stream)
+    }
+
+    /// # Safety
+    /// See abi/acme_abi_functions.h.
+    #[export_name = "acme_client_stream_drop"]
+    pub unsafe extern "C" fn stream_drop(stream: u64) -> acme_status {
+        adapter::acme_stream_drop(stream)
+    }
+}

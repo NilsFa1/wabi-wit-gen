@@ -44,7 +44,62 @@ pub fn emit(m: &Model) -> String {
         emit_resource_trait(&mut o, r);
     }
     emit_dispatch(&mut o, m);
+    emit_exports(&mut o, m);
     o
+}
+
+fn rust_c(t: crate::abi_table::CTy) -> &'static str {
+    use crate::abi_table::CTy::*;
+    match t {
+        Void => "()",
+        U32 => "u32",
+        U64 | Handle => "u64",
+        Status => "acme_status",
+        Bytes => "acme_bytes",
+        Buffer => "acme_buffer",
+        BufferPtr => "*mut acme_buffer",
+        HandlePtr => "*mut u64",
+        Callback => "acme_future_callback",
+        VoidPtr => "*mut std::ffi::c_void",
+        CStr => "*const std::ffi::c_char",
+    }
+}
+
+/// The package's exported C symbols (`<prefix>_call_sync`, ...). They only
+/// forward to the generic, hand-written adapter in `crate::ffi::exports`.
+fn emit_exports(o: &mut String, m: &Model) {
+    let prefix = m.symbol_prefix();
+    w!(o, "");
+    w!(o, "/// Exported ABI symbols of package {} (prefix `{prefix}_`, ABI.md §1.1).", m.contract_id());
+    w!(o, "pub mod exports {{");
+    w!(o, "    use crate::ffi::abi_types::*;");
+    w!(o, "    use crate::ffi::exports as adapter;");
+    for f in crate::abi_table::FUNCTIONS {
+        let ps: Vec<String> = f.params.iter().map(|(t, n)| format!("{}: {}", snake_param(n), rust_c(*t))).collect();
+        let args: Vec<String> = f.params.iter().map(|(_, n)| snake_param(n)).collect();
+        let ret = if f.ret == crate::abi_table::CTy::Void { String::new() } else { format!(" -> {}", rust_c(f.ret)) };
+        w!(o, "");
+        w!(o, "    /// # Safety");
+        w!(o, "    /// See abi/acme_abi_functions.h.");
+        w!(o, "    #[export_name = \"{}\"]", crate::abi_table::symbol(&prefix, f.name));
+        w!(o, "    pub unsafe extern \"C\" fn {}({}){ret} {{", f.name.trim_start_matches("acme_"), ps.join(", "));
+        w!(o, "        adapter::{}({})", f.name, args.join(", "));
+        w!(o, "    }}");
+    }
+    w!(o, "}}");
+}
+
+fn snake_param(n: &str) -> String {
+    let mut out = String::new();
+    for ch in n.chars() {
+        if ch.is_ascii_uppercase() {
+            out.push('_');
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 fn docs(o: &mut String, d: &Option<String>, indent: &str) {

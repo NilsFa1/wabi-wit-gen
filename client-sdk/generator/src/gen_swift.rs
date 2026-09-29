@@ -11,6 +11,7 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
         ("Types.swift".to_string(), types(m)),
         ("WireCodec.swift".to_string(), codec(m)),
         ("AbiConstants.swift".to_string(), constants(m)),
+        ("NativeAbi.swift".to_string(), native_abi(m)),
     ];
     for r in &m.resources {
         files.push((format!("{}.swift", crate::gen_csharp::class_name(m, r)), resource(m, r)));
@@ -290,6 +291,9 @@ fn constants(m: &Model) -> String {
     w!(o, "    public static let package = \"{}:{}\"", m.namespace, m.package);
     w!(o, "    public static let major = {maj}");
     w!(o, "    public static let minor = {min}");
+    w!(o, "    /// Library name and prefix of this package's ABI symbols ({0}_call_sync, ...).", m.symbol_prefix());
+    w!(o, "    public static let library = \"{}\"", m.symbol_prefix());
+    w!(o, "    public static let symbolPrefix = \"{}_\"", m.symbol_prefix());
     w!(o, "}}");
     w!(o, "");
     w!(o, "/// Stable method ids (wit/abi-ids.lock).");
@@ -301,7 +305,7 @@ fn constants(m: &Model) -> String {
     }
     w!(o, "}}");
     w!(o, "");
-    w!(o, "/// ABI {}.{} status codes and capability bits (mirrors abi/acme_client.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
+    w!(o, "/// ABI {}.{} status codes and capability bits (mirrors abi/acme_abi.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
     w!(o, "public enum AcmeAbi {{");
     w!(o, "    public static let major: UInt32 = {}", abi_table::ABI_MAJOR);
     w!(o, "    public static let minor: UInt32 = {}", abi_table::ABI_MINOR);
@@ -312,6 +316,39 @@ fn constants(m: &Model) -> String {
         w!(o, "    public static let cap{}: UInt64 = 1 << {bit}", pascal(&n.to_ascii_lowercase().replace('_', "-")));
     }
     w!(o, "}}");
+    o
+}
+
+fn swift_c(t: abi_table::CTy) -> &'static str {
+    use abi_table::CTy::*;
+    match t {
+        Void => "Void",
+        U32 => "UInt32",
+        U64 | Handle => "UInt64",
+        Status => "acme_status",
+        Bytes => "acme_bytes",
+        Buffer => "acme_buffer",
+        BufferPtr => "UnsafeMutablePointer<acme_buffer>?",
+        HandlePtr => "UnsafeMutablePointer<UInt64>?",
+        Callback => "acme_future_callback!",
+        VoidPtr => "UnsafeMutableRawPointer?",
+        CStr => "UnsafePointer<CChar>!",
+    }
+}
+
+/// Generic ABI names (`acme_call_sync`) forwarding to this package's prefixed
+/// C symbols, so the hand-written runtime is the same for every package.
+fn native_abi(m: &Model) -> String {
+    let mut o = header();
+    w!(o, "import CAcmeClient");
+    w!(o, "");
+    w!(o, "// Symbol prefix of package {}: `{}_`.", m.contract_id(), m.symbol_prefix());
+    for f in abi_table::FUNCTIONS {
+        let ps: Vec<String> = f.params.iter().map(|(t, n)| format!("_ {n}: {}", swift_c(*t))).collect();
+        let args: Vec<&str> = f.params.iter().map(|(_, n)| *n).collect();
+        let ret = if f.ret == abi_table::CTy::Void { String::new() } else { format!(" -> {}", swift_c(f.ret)) };
+        w!(o, "@inline(__always) func {}({}){ret} {{ {}({}) }}", f.name, ps.join(", "), abi_table::symbol(&m.symbol_prefix(), f.name), args.join(", "));
+    }
     o
 }
 

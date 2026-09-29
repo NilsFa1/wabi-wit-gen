@@ -1,4 +1,4 @@
-//! Minimal Zig core implementing the Acme native ABI v1 (abi/acme_client.h).
+//! Minimal Zig core implementing the Acme native ABI v1 (abi/acme_abi_functions.h).
 //!
 //! Deliberately a different architecture from the Rust and Go cores: it is
 //! single-threaded and *eager* — every future is born complete, so
@@ -10,6 +10,9 @@
 //! connect/disconnect (mem:// + api key), get-customer, events (ends at once).
 //!
 //!   zig build-lib -dynamic -lc -O ReleaseSafe acme_core.zig -femit-bin=libacme_client.so
+//!
+//! Exported symbols carry the package prefix from acme_prefix.zig
+//! (acme_client_call_sync, ...).
 
 const std = @import("std");
 const c = std.c;
@@ -209,21 +212,47 @@ fn startsWith(s: []const u8, prefix: []const u8) bool {
     return s.len >= prefix.len and std.mem.eql(u8, s[0..prefix.len], prefix);
 }
 
+// ------------------------------------------------------------------ exports
+
+/// Package symbol prefix (ABI.md §1.1): acme:client -> acme_client_call_sync, ...
+/// Kept in its own file so the same core can be built for another package.
+pub const symbol_prefix = @import("acme_prefix.zig").value;
+
+comptime {
+    @export(&abi_version, .{ .name = symbol_prefix ++ "_abi_version" });
+    @export(&abi_capabilities, .{ .name = symbol_prefix ++ "_abi_capabilities" });
+    @export(&contract_id, .{ .name = symbol_prefix ++ "_contract_id" });
+    @export(&core_info, .{ .name = symbol_prefix ++ "_core_info" });
+    @export(&status_name, .{ .name = symbol_prefix ++ "_status_name" });
+    @export(&buffer_free, .{ .name = symbol_prefix ++ "_buffer_free" });
+    @export(&call_sync, .{ .name = symbol_prefix ++ "_call_sync" });
+    @export(&call_async, .{ .name = symbol_prefix ++ "_call_async" });
+    @export(&object_drop, .{ .name = symbol_prefix ++ "_object_drop" });
+    @export(&future_subscribe, .{ .name = symbol_prefix ++ "_future_subscribe" });
+    @export(&future_poll, .{ .name = symbol_prefix ++ "_future_poll" });
+    @export(&future_take, .{ .name = symbol_prefix ++ "_future_take" });
+    @export(&future_cancel, .{ .name = symbol_prefix ++ "_future_cancel" });
+    @export(&future_drop, .{ .name = symbol_prefix ++ "_future_drop" });
+    @export(&stream_next, .{ .name = symbol_prefix ++ "_stream_next" });
+    @export(&stream_cancel, .{ .name = symbol_prefix ++ "_stream_cancel" });
+    @export(&stream_drop, .{ .name = symbol_prefix ++ "_stream_drop" });
+}
+
 // ------------------------------------------------------------------ metadata
 
-export fn acme_abi_version() u32 {
+fn abi_version() callconv(.c) u32 {
     return (1 << 16) | 0;
 }
-export fn acme_abi_capabilities() u64 {
+fn abi_capabilities() callconv(.c) u64 {
     return CAPS;
 }
-export fn acme_contract_id() [*:0]const u8 {
+fn contract_id() callconv(.c) [*:0]const u8 {
     return "acme:client@1.0.0";
 }
-export fn acme_core_info() [*:0]const u8 {
+fn core_info() callconv(.c) [*:0]const u8 {
     return "acme-zig-core/0.1.0 (eager stub)";
 }
-export fn acme_status_name(status: i32) [*:0]const u8 {
+fn status_name(status: i32) callconv(.c) [*:0]const u8 {
     return switch (status) {
         OK => "ACME_OK",
         PENDING => "ACME_PENDING",
@@ -241,13 +270,13 @@ export fn acme_status_name(status: i32) [*:0]const u8 {
     };
 }
 
-export fn acme_buffer_free(buf: AcmeBuffer) void {
+fn buffer_free(buf: AcmeBuffer) callconv(.c) void {
     if (buf.ptr) |p| alloc.free(p[0..buf.len]);
 }
 
 // --------------------------------------------------------------------- calls
 
-export fn acme_call_sync(object: u64, method: u32, request: AcmeBytes, out: ?*AcmeBuffer) i32 {
+fn call_sync(object: u64, method: u32, request: AcmeBytes, out: ?*AcmeBuffer) callconv(.c) i32 {
     const o = out orelse return ERR_INVALID_ARGUMENT;
     o.* = .{ .ptr = null, .len = 0 };
     const req = requestSlice(request) orelse return ERR_INVALID_ARGUMENT;
@@ -321,7 +350,7 @@ fn constructor(r: *Reader, w: *Writer, out: *AcmeBuffer) i32 {
     return OK;
 }
 
-export fn acme_call_async(object: u64, method: u32, request: AcmeBytes, out: ?*u64) i32 {
+fn call_async(object: u64, method: u32, request: AcmeBytes, out: ?*u64) callconv(.c) i32 {
     const o = out orelse return ERR_INVALID_ARGUMENT;
     o.* = 0;
     const req = requestSlice(request) orelse return ERR_INVALID_ARGUMENT;
@@ -386,7 +415,7 @@ export fn acme_call_async(object: u64, method: u32, request: AcmeBytes, out: ?*u
     return OK;
 }
 
-export fn acme_object_drop(object: u64) i32 {
+fn object_drop(object: u64) callconv(.c) i32 {
     lock();
     defer unlock();
     const e = table.get(object) orelse return ERR_INVALID_HANDLE;
@@ -405,7 +434,7 @@ fn futureOf(h: u64) ?*Future {
     return if (e == .future) e.future else null;
 }
 
-export fn acme_future_subscribe(h: u64, cb: Callback, ud: ?*anyopaque) i32 {
+fn future_subscribe(h: u64, cb: Callback, ud: ?*anyopaque) callconv(.c) i32 {
     _ = ud;
     if (cb == null) return ERR_INVALID_ARGUMENT;
     lock();
@@ -416,14 +445,14 @@ export fn acme_future_subscribe(h: u64, cb: Callback, ud: ?*anyopaque) i32 {
     return READY; // eager core: always complete, the callback is never invoked
 }
 
-export fn acme_future_poll(h: u64) i32 {
+fn future_poll(h: u64) callconv(.c) i32 {
     lock();
     defer unlock();
     _ = futureOf(h) orelse return ERR_INVALID_HANDLE;
     return READY;
 }
 
-export fn acme_future_take(h: u64, out: ?*AcmeBuffer) i32 {
+fn future_take(h: u64, out: ?*AcmeBuffer) callconv(.c) i32 {
     const o = out orelse return ERR_INVALID_ARGUMENT;
     o.* = .{ .ptr = null, .len = 0 };
     lock();
@@ -435,14 +464,14 @@ export fn acme_future_take(h: u64, out: ?*AcmeBuffer) i32 {
     return f.status;
 }
 
-export fn acme_future_cancel(h: u64) i32 {
+fn future_cancel(h: u64) callconv(.c) i32 {
     lock();
     defer unlock();
     _ = futureOf(h) orelse return ERR_INVALID_HANDLE;
     return OK; // already complete: completion wins
 }
 
-export fn acme_future_drop(h: u64) i32 {
+fn future_drop(h: u64) callconv(.c) i32 {
     lock();
     defer unlock();
     const f = futureOf(h) orelse return ERR_INVALID_HANDLE;
@@ -459,7 +488,7 @@ fn isStream(h: u64) bool {
     return e == .stream;
 }
 
-export fn acme_stream_next(h: u64, out: ?*u64) i32 {
+fn stream_next(h: u64, out: ?*u64) callconv(.c) i32 {
     const o = out orelse return ERR_INVALID_ARGUMENT;
     o.* = 0;
     lock();
@@ -471,13 +500,13 @@ export fn acme_stream_next(h: u64, out: ?*u64) i32 {
     return OK;
 }
 
-export fn acme_stream_cancel(h: u64) i32 {
+fn stream_cancel(h: u64) callconv(.c) i32 {
     lock();
     defer unlock();
     return if (isStream(h)) OK else ERR_INVALID_HANDLE;
 }
 
-export fn acme_stream_drop(h: u64) i32 {
+fn stream_drop(h: u64) callconv(.c) i32 {
     lock();
     defer unlock();
     if (!isStream(h)) return ERR_INVALID_HANDLE;

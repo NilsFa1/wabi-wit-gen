@@ -1,6 +1,7 @@
 # Acme Native ABI v1.0 — Spezifikation
 
-Normative Beschreibung von [`acme_client.h`](acme_client.h). Die ABI ist das
+Normative Beschreibung von [`acme_abi.h`](acme_abi.h) (Typen, Konstanten) und
+[`acme_abi_functions.h`](acme_abi_functions.h) (die 17 Funktionen). Die ABI ist das
 **Implementierungsprotokoll** zwischen Sprach-SDKs (C#, Java, Swift, …) und
 einem nativen Core (Rust, Go, Zig, …). Sie ist **nicht** die öffentliche API —
 die steht ausschließlich in [`wit/client.wit`](../wit/client.wit).
@@ -13,7 +14,7 @@ Konformität prüft [`tests/abi/conformance.c`](../tests/abi/conformance.c)
 
 ## 1. Grundprinzipien
 
-1. **Klein und generisch.** 17 Funktionen. Eine neue WIT-Funktion ändert die
+1. **Klein und generisch.** 17 Funktionen (pro WIT-Paket unter eigenem Symbol-Präfix, §1.1). Eine neue WIT-Funktion ändert die
    ABI nicht: sie bekommt eine Method-ID und wird über `acme_call_sync` /
    `acme_call_async` aufgerufen.
 2. **Nur feste C-Typen.** `uint32_t`, `uint64_t`, `int32_t`, `size_t`,
@@ -25,6 +26,36 @@ Konformität prüft [`tests/abi/conformance.c`](../tests/abi/conformance.c)
    liefert dasselbe Future-Handle (§4).
 5. **Nie undefiniertes Verhalten durch Handle-Fehler.** Ungültige, fremde oder
    doppelt freigegebene Handles liefern `ACME_ERR_INVALID_HANDLE` (§3).
+
+### 1.1 Symbol-Präfix pro WIT-Paket
+
+Jedes WIT-Paket exportiert die 17 Funktionen unter einem **eigenen Präfix**,
+abgeleitet aus dem Paketnamen: `<namespace>_<name>` in snake_case.
+
+| WIT-Paket | Präfix | Symbole | Bibliothek |
+|---|---|---|---|
+| `acme:client` | `acme_client` | `acme_client_call_sync`, `acme_client_future_take`, … | `libacme_client.so` / `acme_client.dll` |
+| `geo:lib` | `geo_lib` | `geo_lib_call_sync`, … | `libgeo_lib.so` |
+
+* **Warum:** Mehrere Cores bzw. Pakete können im selben Prozess leben, auch
+  **statisch in eine Binary gelinkt** (iOS-xcframework, Rust-Core mit
+  eingebetteter Go/Zig-Bibliothek). Mit gemeinsamen Namen würde das Linken
+  fehlschlagen (`multiple definition of …`) oder, bei dynamischen
+  Bibliotheken, ein Core still den anderen überdecken.
+  `tests/abi/multi_package.c` linkt zwei Cores unter `acme_client` und
+  `geo_lib` statisch in ein Programm und ruft beide auf.
+* **Unverändert gemeinsam** sind die Typen (`acme_bytes`, `acme_buffer`,
+  `acme_status`, `acme_future_callback`, …), Statuscodes und Capabilities in
+  `acme_abi.h`. Sie sind für alle Pakete identisch.
+* **Header:** `acme_abi_functions.h` deklariert die Funktionen mit
+  `ACME_FN(name)` für das jeweils definierte `ACME_PREFIX` und darf pro Paket
+  einmal eingebunden werden. Der Generator erzeugt zusätzlich einen
+  ausgeschriebenen Header je Paket (`generated/c/<präfix>.h`).
+* **SDKs** kennen den Präfix aus dem generierten Code (`Contract.SymbolPrefix`,
+  `AbiConstants.SYMBOL_PREFIX`, …). Der JNI-Shim bekommt ihn zur Laufzeit und
+  ist deshalb für alle Pakete derselbe.
+* Zwei *Major-Versionen* desselben Pakets im selben Prozess sind nicht
+  vorgesehen (gleicher Präfix).
 
 ## 2. Versionierung und Kompatibilität
 
@@ -316,8 +347,11 @@ ABI (langsamer, fehleranfällig).
 
 ## 11. Checkliste: einen neuen Core implementieren
 
-1. Die 17 Funktionen aus `acme_client.h` exportieren (C-Linkage, `ACME_API`).
-   cgo: `#define ACME_CLIENT_NO_PROTOTYPES` vor dem Include.
+1. Die 17 Funktionen aus `acme_abi_functions.h` **unter dem Präfix des
+   Pakets** exportieren (C-Linkage, `ACME_API`), z. B. `acme_client_call_sync`
+   (§1.1). Rust: generierte `#[export_name]`-Wrapper; Go: `//export acme_client_…`
+   mit nur `acme_abi.h` im cgo-Preamble; Zig: `@export(…, .{ .name = prefix ++ "_…" })`;
+   C#: `[UnmanagedCallersOnly(EntryPoint = Prefix + "…")]`.
 2. Handle-Tabelle mit nie wiederverwendeten 64-Bit-Handles (§3).
 3. Future-Zustandsautomat mit „erster Übergang gewinnt“ (§4.1), Callback
    genau einmal, nie synchron aus Host-Aufrufen.

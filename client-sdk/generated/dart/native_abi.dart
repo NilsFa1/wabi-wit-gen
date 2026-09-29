@@ -26,23 +26,23 @@ typedef AcmeFutureCallback = Void Function(Pointer<Void>, Uint64);
 /// when WIT functions are added: those are addressed by method id.
 final class NativeAbi {
   NativeAbi(DynamicLibrary lib)
-      : acme_abi_version = lib.lookupFunction<Uint32 Function(), int Function()>('acme_abi_version'),
-        acme_abi_capabilities = lib.lookupFunction<Uint64 Function(), int Function()>('acme_abi_capabilities'),
-        acme_contract_id = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('acme_contract_id'),
-        acme_core_info = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('acme_core_info'),
-        acme_status_name = lib.lookupFunction<Pointer<Utf8> Function(Int32), Pointer<Utf8> Function(int)>('acme_status_name'),
-        acme_buffer_free = lib.lookupFunction<Void Function(AcmeBuffer), void Function(AcmeBuffer)>('acme_buffer_free'),
-        acme_call_sync = lib.lookupFunction<Int32 Function(Uint64, Uint32, AcmeBytes, Pointer<AcmeBuffer>), int Function(int, int, AcmeBytes, Pointer<AcmeBuffer>)>('acme_call_sync'),
-        acme_call_async = lib.lookupFunction<Int32 Function(Uint64, Uint32, AcmeBytes, Pointer<Uint64>), int Function(int, int, AcmeBytes, Pointer<Uint64>)>('acme_call_async'),
-        acme_object_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_object_drop'),
-        acme_future_subscribe = lib.lookupFunction<Int32 Function(Uint64, Pointer<NativeFunction<AcmeFutureCallback>>, Pointer<Void>), int Function(int, Pointer<NativeFunction<AcmeFutureCallback>>, Pointer<Void>)>('acme_future_subscribe'),
-        acme_future_poll = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_future_poll'),
-        acme_future_take = lib.lookupFunction<Int32 Function(Uint64, Pointer<AcmeBuffer>), int Function(int, Pointer<AcmeBuffer>)>('acme_future_take'),
-        acme_future_cancel = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_future_cancel'),
-        acme_future_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_future_drop'),
-        acme_stream_next = lib.lookupFunction<Int32 Function(Uint64, Pointer<Uint64>), int Function(int, Pointer<Uint64>)>('acme_stream_next'),
-        acme_stream_cancel = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_stream_cancel'),
-        acme_stream_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_stream_drop');
+      : acme_abi_version = lib.lookupFunction<Uint32 Function(), int Function()>('acme_client_abi_version'),
+        acme_abi_capabilities = lib.lookupFunction<Uint64 Function(), int Function()>('acme_client_abi_capabilities'),
+        acme_contract_id = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('acme_client_contract_id'),
+        acme_core_info = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('acme_client_core_info'),
+        acme_status_name = lib.lookupFunction<Pointer<Utf8> Function(Int32), Pointer<Utf8> Function(int)>('acme_client_status_name'),
+        acme_buffer_free = lib.lookupFunction<Void Function(AcmeBuffer), void Function(AcmeBuffer)>('acme_client_buffer_free'),
+        acme_call_sync = lib.lookupFunction<Int32 Function(Uint64, Uint32, AcmeBytes, Pointer<AcmeBuffer>), int Function(int, int, AcmeBytes, Pointer<AcmeBuffer>)>('acme_client_call_sync'),
+        acme_call_async = lib.lookupFunction<Int32 Function(Uint64, Uint32, AcmeBytes, Pointer<Uint64>), int Function(int, int, AcmeBytes, Pointer<Uint64>)>('acme_client_call_async'),
+        acme_object_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_object_drop'),
+        acme_future_subscribe = lib.lookupFunction<Int32 Function(Uint64, Pointer<NativeFunction<AcmeFutureCallback>>, Pointer<Void>), int Function(int, Pointer<NativeFunction<AcmeFutureCallback>>, Pointer<Void>)>('acme_client_future_subscribe'),
+        acme_future_poll = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_future_poll'),
+        acme_future_take = lib.lookupFunction<Int32 Function(Uint64, Pointer<AcmeBuffer>), int Function(int, Pointer<AcmeBuffer>)>('acme_client_future_take'),
+        acme_future_cancel = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_future_cancel'),
+        acme_future_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_future_drop'),
+        acme_stream_next = lib.lookupFunction<Int32 Function(Uint64, Pointer<Uint64>), int Function(int, Pointer<Uint64>)>('acme_client_stream_next'),
+        acme_stream_cancel = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_stream_cancel'),
+        acme_stream_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_stream_drop');
 
   final int Function() acme_abi_version;
   final int Function() acme_abi_capabilities;

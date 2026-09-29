@@ -12,7 +12,7 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
         ("types.dart".to_string(), types(m)),
         ("wire_codec.dart".to_string(), codec(m)),
         ("abi_constants.dart".to_string(), constants(m)),
-        ("native_abi.dart".to_string(), native_abi()),
+        ("native_abi.dart".to_string(), native_abi(m)),
     ];
     for r in &m.resources {
         files.push((format!("{}.dart", snake(&format!("{}-{}", m.namespace, r.name))), resource(m, r)));
@@ -405,6 +405,10 @@ fn constants(m: &Model) -> String {
     w!(o, "  static const package = '{}:{}';", m.namespace, m.package);
     w!(o, "  static const major = {maj};");
     w!(o, "  static const minor = {min};");
+    w!(o, "");
+    w!(o, "  /// Library name and prefix of this package's ABI symbols ({0}_call_sync, ...).", m.symbol_prefix());
+    w!(o, "  static const library = '{}';", m.symbol_prefix());
+    w!(o, "  static const symbolPrefix = '{}_';", m.symbol_prefix());
     w!(o, "}}");
     w!(o, "");
     w!(o, "/// Stable method ids (wit/abi-ids.lock).");
@@ -416,7 +420,7 @@ fn constants(m: &Model) -> String {
     }
     w!(o, "}}");
     w!(o, "");
-    w!(o, "/// ABI {}.{} status codes (abi/acme_client.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
+    w!(o, "/// ABI {}.{} status codes (abi/acme_abi.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
     w!(o, "abstract final class AcmeStatus {{");
     for (n, v) in abi_table::STATUSES {
         w!(o, "  static const {} = {v};", camel(&n.to_ascii_lowercase().replace('_', "-")));
@@ -458,7 +462,7 @@ fn ffi_dart(t: CTy) -> &'static str {
     }
 }
 
-fn native_abi() -> String {
+fn native_abi(m: &Model) -> String {
     let mut o = header("non_constant_identifier_names, camel_case_types");
     w!(o, "import 'dart:ffi';");
     w!(o, "");
@@ -497,7 +501,7 @@ fn native_abi() -> String {
                 np.join(", "),
                 ffi_dart(f.ret),
                 dp.join(", "),
-                f.name
+                abi_table::symbol(&m.symbol_prefix(), f.name)
             )
         })
         .collect();

@@ -1,4 +1,4 @@
-// C# ABI adapter: implements abi/acme_client.h with [UnmanagedCallersOnly]
+// C# ABI adapter: implements abi/acme_abi_functions.h (prefix acme_client_) with [UnmanagedCallersOnly]
 // exports. NativeAOT turns this into a plain C shared library. This file
 // replaces core-rust/src/ffi — nothing on the SDK side changes.
 using System.Collections.Concurrent;
@@ -235,6 +235,9 @@ static class Wire
 
 static unsafe class Exports
 {
+    /// <summary>Package symbol prefix (ABI.md §1.1): acme:client -> acme_client_call_sync, ...</summary>
+    private const string Prefix = "acme_client_";
+
     private static readonly byte* ContractId = Utf8("acme:client@1.0.0");
     private static readonly byte* CoreInfo = Utf8("acme-csharp-core/0.1.0 (NativeAOT, thread pool)");
     private static readonly Dictionary<int, nint> StatusNames = new()
@@ -265,23 +268,23 @@ static unsafe class Exports
 
     // ------------------------------------------------------------ metadata
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_abi_version", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "abi_version", CallConvs = [typeof(CallConvCdecl)])]
     public static uint AbiVersion() => 1u << 16;
 
     // sync + async + streams + cancellation + threaded callbacks + msgpack v1
-    [UnmanagedCallersOnly(EntryPoint = "acme_abi_capabilities", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "abi_capabilities", CallConvs = [typeof(CallConvCdecl)])]
     public static ulong Capabilities() => 0b111111;
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_contract_id", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "contract_id", CallConvs = [typeof(CallConvCdecl)])]
     public static byte* Contract() => ContractId;
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_core_info", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "core_info", CallConvs = [typeof(CallConvCdecl)])]
     public static byte* Info() => CoreInfo;
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_status_name", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "status_name", CallConvs = [typeof(CallConvCdecl)])]
     public static byte* StatusName(int status) => StatusNames.TryGetValue(status, out var p) ? (byte*)p : UnknownStatus;
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_buffer_free", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "buffer_free", CallConvs = [typeof(CallConvCdecl)])]
     public static void BufferFree(AcmeBuffer b)
     {
         if (b.Ptr != null) NativeMemory.Free(b.Ptr);
@@ -289,7 +292,7 @@ static unsafe class Exports
 
     // --------------------------------------------------------------- calls
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_call_sync", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "call_sync", CallConvs = [typeof(CallConvCdecl)])]
     public static int CallSync(ulong obj, uint method, AcmeBytes request, AcmeBuffer* output)
     {
         if (output == null) return Status.InvalidArgument;
@@ -308,7 +311,7 @@ static unsafe class Exports
         }
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_call_async", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "call_async", CallConvs = [typeof(CallConvCdecl)])]
     public static int CallAsync(ulong obj, uint method, AcmeBytes request, ulong* future)
     {
         if (future == null) return Status.InvalidArgument;
@@ -331,7 +334,7 @@ static unsafe class Exports
         }
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_object_drop", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "object_drop", CallConvs = [typeof(CallConvCdecl)])]
     public static int ObjectDrop(ulong obj)
     {
         if (Handles.Remove<Client>(obj) is not { } c) return Status.InvalidHandle;
@@ -341,17 +344,17 @@ static unsafe class Exports
 
     // ------------------------------------------------------------- futures
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_future_subscribe", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "future_subscribe", CallConvs = [typeof(CallConvCdecl)])]
     public static int Subscribe(ulong h, delegate* unmanaged[Cdecl]<void*, ulong, void> cb, void* ud)
     {
         if (cb == null) return Status.InvalidArgument;
         return Handles.Get<NativeFuture>(h)?.Subscribe(cb, ud) ?? Status.InvalidHandle;
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_future_poll", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "future_poll", CallConvs = [typeof(CallConvCdecl)])]
     public static int Poll(ulong h) => Handles.Get<NativeFuture>(h)?.Poll() ?? Status.InvalidHandle;
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_future_take", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "future_take", CallConvs = [typeof(CallConvCdecl)])]
     public static int Take(ulong h, AcmeBuffer* output)
     {
         if (output == null) return Status.InvalidArgument;
@@ -362,7 +365,7 @@ static unsafe class Exports
         return status;
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_future_cancel", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "future_cancel", CallConvs = [typeof(CallConvCdecl)])]
     public static int Cancel(ulong h)
     {
         if (Handles.Get<NativeFuture>(h) is not { } f) return Status.InvalidHandle;
@@ -370,7 +373,7 @@ static unsafe class Exports
         return Status.Ok;
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_future_drop", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "future_drop", CallConvs = [typeof(CallConvCdecl)])]
     public static int FutureDrop(ulong h)
     {
         if (Handles.Remove<NativeFuture>(h) is not { } f) return Status.InvalidHandle;
@@ -380,7 +383,7 @@ static unsafe class Exports
 
     // ------------------------------------------------------------- streams
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_stream_next", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "stream_next", CallConvs = [typeof(CallConvCdecl)])]
     public static int StreamNext(ulong h, ulong* future)
     {
         if (future == null) return Status.InvalidArgument;
@@ -391,7 +394,7 @@ static unsafe class Exports
         return status;
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_stream_cancel", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "stream_cancel", CallConvs = [typeof(CallConvCdecl)])]
     public static int StreamCancel(ulong h)
     {
         if (Handles.Get<NativeStream>(h) is not { } s) return Status.InvalidHandle;
@@ -399,7 +402,7 @@ static unsafe class Exports
         return Status.Ok;
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "acme_stream_drop", CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(EntryPoint = Prefix + "stream_drop", CallConvs = [typeof(CallConvCdecl)])]
     public static int StreamDrop(ulong h)
     {
         if (Handles.Remove<NativeStream>(h) is not { } s) return Status.InvalidHandle;
