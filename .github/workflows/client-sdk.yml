@@ -1,0 +1,53 @@
+name: client-sdk
+
+on:
+  push:
+    paths: ["client-sdk/**", ".github/workflows/client-sdk.yml"]
+  pull_request:
+    paths: ["client-sdk/**", ".github/workflows/client-sdk.yml"]
+
+defaults:
+  run:
+    working-directory: client-sdk
+
+jobs:
+  linux-matrix:
+    # Generator checks, Rust core tests, and the compatibility matrix:
+    # C ABI conformance + unchanged C#/Java test binaries against Rust, Go and Zig cores.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: "8.0.x" }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "25" }
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - run: pip install ziglang==0.16.0
+      - run: scripts/test-all.sh
+
+  swift-macos:
+    # Swift cannot be built in the Linux container used to write this PoC; verify it here.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --manifest-path core-rust/Cargo.toml
+      - name: swift build + test against the Rust core
+        working-directory: client-sdk/sdk/swift
+        run: |
+          LIB=$GITHUB_WORKSPACE/client-sdk/core-rust/target/release
+          swift build -Xlinker -L$LIB
+          DYLD_LIBRARY_PATH=$LIB swift test -Xlinker -L$LIB
+          DYLD_LIBRARY_PATH=$LIB swift run -Xlinker -L$LIB AcmeExample
+
+  native-artifacts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get install -y gcc-mingw-w64-x86-64 && pip install ziglang==0.16.0
+      - run: scripts/build-native.sh linux && scripts/build-native.sh windows
+      - uses: actions/upload-artifact@v4
+        with: { name: native, path: client-sdk/build/native }

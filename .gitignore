@@ -1,8 +1,13 @@
+# Rust
 target/
-bin/
-obj/
-out/
+# .NET build output (scoped: `bin/` alone would also hide core-rust/src/bin)
+client-sdk/**/bin/Debug/
+client-sdk/**/bin/Release/
+client-sdk/**/obj/
+# Java / generic build output
 *.class
 /client-sdk/build/
+# Zig
 .zig-cache/
 zig-out/
+*.o
