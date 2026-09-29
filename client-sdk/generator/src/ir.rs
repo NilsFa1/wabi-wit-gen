@@ -78,7 +78,6 @@ pub struct Func {
     pub name: String,
     pub id: u32,
     pub is_async: bool,
-    pub is_ctor: bool,
     pub params: Vec<(String, Ty)>,
     pub ret: Ret,
     pub docs: Option<String>,
@@ -113,13 +112,6 @@ impl Model {
         (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0))
     }
 
-    pub fn type_decl(&self, name: &str) -> &TypeDecl {
-        self.types.iter().find(|t| t.name == name).expect("unknown named type")
-    }
-
-    pub fn is_enum(&self, name: &str) -> bool {
-        matches!(self.type_decl(name).kind, TypeKind::Enum(_))
-    }
 }
 
 pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> Result<Model> {
@@ -251,7 +243,6 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
                 name: item,
                 id,
                 is_async: func.kind.is_async(),
-                is_ctor,
                 params,
                 ret,
                 docs: func.docs.contents.clone(),
