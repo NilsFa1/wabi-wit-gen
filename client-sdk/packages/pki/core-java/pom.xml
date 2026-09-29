@@ -138,7 +138,7 @@
             <version>1.0.29</version>
             <configuration>
               <!-- no main method is run: the library is entered through the @CEntryPoint functions -->
-              <mainClass>acme.core.runtime.NativeExports</mainClass>
+              <mainClass>acme.core.runtime.SharedLibMain</mainClass>
               <nativeImageArgs>
                 <arg>-H:+ReportExceptionStackTraces</arg>
                 <arg>--enable-url-protocols=http</arg>

@@ -19,7 +19,26 @@ PREFIX=gematik_pki
 export JAVA_HOME="$GRAALVM_HOME"
 mkdir -p "$OUT"
 
-(cd "$HERE" && mvn -B -Pmobile package -DskipTests gluonfx:sharedlib -Dgluonfx.target="$TARGET" -Dgluonfx.verbose=true)
+# Substrate 0.0.69 passes -H:+ForceNoROSectionRelocations for Android, which the
+# newest Gluon GraalVM (23+25.1-dev) does not know: run it through a GraalVM
+# "view" whose native-image drops that flag.
+GRAAL_FOR_SUBSTRATE="$GRAALVM_HOME"
+if [ "$TARGET" = android ]; then
+  GRAAL_FOR_SUBSTRATE="$HERE/target/graal-view"
+  rm -rf "$GRAAL_FOR_SUBSTRATE" && mkdir -p "$GRAAL_FOR_SUBSTRATE/bin"
+  for f in "$GRAALVM_HOME"/*; do [ "$(basename "$f")" = bin ] || ln -s "$f" "$GRAAL_FOR_SUBSTRATE/"; done
+  for f in "$GRAALVM_HOME"/bin/*; do ln -s "$f" "$GRAAL_FOR_SUBSTRATE/bin/"; done
+  rm "$GRAAL_FOR_SUBSTRATE/bin/native-image"
+  cat > "$GRAAL_FOR_SUBSTRATE/bin/native-image" <<SH
+#!/usr/bin/env bash
+args=(); for a in "\$@"; do [ "\$a" = "-H:+ForceNoROSectionRelocations" ] || args+=("\$a"); done
+exec "$GRAALVM_HOME/bin/native-image" "\${args[@]}"
+SH
+  chmod +x "$GRAAL_FOR_SUBSTRATE/bin/native-image"
+fi
+
+(cd "$HERE" && GRAALVM_HOME="$GRAAL_FOR_SUBSTRATE" mvn -B -Pmobile package -DskipTests gluonfx:sharedlib \
+  -Dgluonfx.target="$TARGET" -Dgluonfx.graalvmHome="$GRAAL_FOR_SUBSTRATE" -Dgluonfx.verbose=true)
 
 GVM="$HERE/target/gluonfx"
 case "$TARGET" in
