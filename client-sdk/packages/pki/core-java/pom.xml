@@ -128,34 +128,4 @@
       </plugin>
     </plugins>
   </build>
-
-  <profiles>
-    <!--
-      Experiment: the same core as a shared library for Android / iOS with Gluon
-      Substrate + Gluon's GraalVM (see build-mobile.sh). Not part of the normal build.
-        mvn -Pmobile package gluonfx:sharedlib -Dgluonfx.target=android|ios
-    -->
-    <profile>
-      <id>mobile</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>com.gluonhq</groupId>
-            <artifactId>gluonfx-maven-plugin</artifactId>
-            <version>1.0.24</version><!-- Substrate 0.0.64: matches the newest public Gluon GraalVM (23+25.1-dev, 2024-09) -->
-            <configuration>
-              <!-- no main method is run: the library is entered through the @CEntryPoint functions -->
-              <mainClass>acme.core.runtime.SharedLibMain</mainClass>
-              <nativeImageArgs>
-                <arg>-H:+ReportExceptionStackTraces</arg>
-                <arg>--enable-url-protocols=http</arg>
-                <!-- GraalVM 23 finds a SAX locator in the image heap (JAXB/XML setup at build time) -->
-                <arg>--initialize-at-build-time=org.xml.sax.helpers.LocatorImpl</arg>
-              </nativeImageArgs>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

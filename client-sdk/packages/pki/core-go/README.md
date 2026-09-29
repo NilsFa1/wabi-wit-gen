@@ -1,6 +1,7 @@
 # gematik:pki — Go core (gempki)
 
-The second core of the `gematik:pki` package, next to the Java core
+**The default core of `gematik:pki`:** all platform libraries and packages are
+built from it. The second core of the `gematik:pki` package, next to the Java core
 (`../core-java`, gemLibPki via GraalVM). Both implement the same WIT contract
 (`../wit/pki.wit`); the SDKs (C#, Java, Swift, Dart) cannot tell them apart and
 run the same tests against both (`../run-tests.sh`).
@@ -9,7 +10,8 @@ run the same tests against both (`../run-tests.sh`).
 |---|---|---|
 | Basis | ref-GemLibPki (Java) | [gempki](https://github.com/gematik/zero-lab/tree/main/go/gempki) v0.23.0 (Go) |
 | Native library | GraalVM native-image, two libraries, ~90 MB | `go build -buildmode=c-shared/c-archive`, one library, ~8–10 MB |
-| Platforms | Linux/macOS/Windows; Android/iOS only via Gluon (experimental) | Linux, Windows, macOS, Android, iOS (`build.sh`) |
+| Platforms | Linux only (reference in CI); no Android/iOS | Linux, Windows, macOS, Android, iOS (`build.sh`) |
+| Role | reference for comparison tests | **the core that ships** (packages, `pki-go` workflow) |
 | Algorithms | RSA + ECC | ECC (Brainpool and NIST curves) |
 | Licence | Apache-2.0 | **EUPL-1.2** |
 

@@ -80,19 +80,20 @@ eager Stub mit ABI 1.0 und kann noch keine Host-Calls auslösen. Dafür braucht 
 
 ## Java-Cores (GraalVM native-image)
 
-**Status:** PoC mit `packages/pki` (gemLibPki). Offen:
+**Status:** PoC mit `packages/pki` (gemLibPki), dort nur noch **Referenz-Core**
+für Vergleichstests auf Linux; ausgeliefert wird der Go-Core. Java-Cores werden
+**nicht auf allen Plattformen unterstützt**: GraalVM native-image hat keine
+Android/iOS-Targets; der Versuch über Gluon Substrate wurde verworfen (öffentliche
+Toolchain steht auf GraalVM 23 von 2024). Offen:
 
 * Streams und Host-Calls für Java-Cores (Runtime + `java-core`-Emitter),
-* native Builds pro Zielplattform (macOS/Windows in CI; Android/iOS brauchen
-  GraalVM-Targets bzw. ein anderes Packaging),
+* native Builds für macOS/Windows (Android/iOS: siehe oben, nicht geplant),
 * Größe: das Image ist ~65 MB (gemLibPki zieht dss/xades4j/Guice mit);
   Abhängigkeiten ausdünnen oder `-Os`/`--gc` Optionen prüfen,
 * TSL-Signaturprüfung (TUC_PKI_001) und OCSP im Test (Mock-Responder),
 * gemLibPki aktualisieren: der Core nutzt 0.9.3 (alte groupId
   `de.gematik.pki.gemlibpki`, 2022); aktuell ist `de.gematik.pki:gemLibPki:5.0.2`
-  (mit dss), native-image-Konfiguration neu aufzeichnen,
-* Android/iOS: per Gluon Substrate gebaut (`pki-mobile`, gluonfx 1.0.24 +
-  Gluon GraalVM 23), auf Geräten noch nicht getestet.
+  (mit dss), native-image-Konfiguration neu aufzeichnen.
 
 ## gematik:pki Go-Core (gempki, EUPL-1.2)
 

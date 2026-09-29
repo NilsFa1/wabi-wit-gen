@@ -76,6 +76,12 @@ Zig kann noch keine Host-Calls auslösen (siehe [docs/ROADMAP.md](docs/ROADMAP.m
 
 ### Java als Core-Sprache: gematik ref-GemLibPki als native Bibliothek
 
+> **Hinweis:** Der Java-Core wird **nicht auf allen Plattformen unterstützt**. Er
+> wird nur unter Linux gebaut und dient als **Referenz** für Vergleichstests;
+> Android und iOS gehen mit GraalVM native-image nicht (der Versuch über Gluon
+> Substrate wurde verworfen). Ausgeliefert wird der **Go-Core** (unten), der für
+> alle Plattformen gebaut wird.
+
 [`packages/pki`](packages/pki) (`gematik:pki`) hat einen **Core in Java**: einen
 kleinen Wrapper um gematik [ref-GemLibPki](https://github.com/gematik/ref-GemLibPki)
 mit einer Methode, der Zertifikatsprüfung nach TUC_PKI_018 gegen die CAs einer
@@ -86,7 +92,7 @@ Target `java-core`); die generische Runtime liegt in `runtime/java-core`
 (inkl. C-Shim für die GraalVM-Isolate), Details in
 [packages/pki/core-java/README.md](packages/pki/core-java/README.md).
 
-**Zweiter Core in Go** ([packages/pki/core-go](packages/pki/core-go/README.md),
+**Go-Core, der Standard-Core** ([packages/pki/core-go](packages/pki/core-go/README.md),
 Lizenz **EUPL-1.2**): gematik zero-lab [gempki](https://github.com/gematik/zero-lab/tree/main/go/gempki)
 für Parsing (inkl. Brainpool), TSL, Admission und OCSP, darüber die Prüfschritte
 von TUC_PKI_018 nach gemLibPki 5.0.2 (gleiche Reihenfolge, Fehlercodes, Texte),

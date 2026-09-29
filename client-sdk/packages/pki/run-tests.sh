@@ -2,8 +2,9 @@
 # gematik:pki PoC: TUC_PKI_018 certificate verification from every SDK, against
 # two interchangeable cores implementing the same WIT contract:
 #
-#   java  gematik ref-GemLibPki as a GraalVM native library (needs GRAALVM_HOME)
-#   go    gematik zero-lab gempki + TUC_PKI_018 layer (EUPL-1.2, core-go/)
+#   go    gematik zero-lab gempki + TUC_PKI_018 layer (EUPL-1.2, core-go/): the default core
+#   java  gematik ref-GemLibPki as a GraalVM native library (needs GRAALVM_HOME): reference
+#         on Linux only, compared with the Go core by running the same tests
 #
 #   1. JVM tests of the Java core (wrapper + generated dispatcher); writes missing fixtures
 #   2. Go core unit tests, then its c-shared build

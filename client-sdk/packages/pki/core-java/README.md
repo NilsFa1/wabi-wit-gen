@@ -1,5 +1,13 @@
 # gematik:pki — Java core (gemLibPki, GraalVM native-image)
 
+> **Platform support:** this core is the **reference** implementation, not the
+> one that ships. It is built and tested on **Linux** only (GraalVM
+> native-image, `client-sdk` CI), where the SDK tests compare it with the Go
+> core. macOS/Windows would need a native-image build per platform;
+> **Android and iOS are not supported** (GraalVM has no mobile targets; a trial
+> with Gluon Substrate was dropped: its public toolchain is stuck at GraalVM 23
+> from 2024). The core for all platforms is [`../core-go`](../core-go/README.md).
+
 A core written in **Java**: a small wrapper around gematik
 [ref-GemLibPki](https://github.com/gematik/ref-GemLibPki) that offers one
 operation, **TUC_PKI_018 certificate verification** against the CAs listed in a
