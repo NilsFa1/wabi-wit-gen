@@ -354,10 +354,12 @@ static void t_stream(void) {
     A.buffer_free(out);
     CHECK(s != 0, "events() returned no stream handle");
 
+    /* one pull at a time; checked while the pull is still pending (nothing
+     * buffered yet), otherwise the first pull may already have completed */
+    EQ(A.stream_next(s, &f), ACME_OK);
+    EQ(A.stream_next(s, &f2), ACME_ERR_BUSY);
     EQ(call(c, M_SEND_COMMAND, req_command(&m, "broadcast", "hello \xf0\x9f\x91\x8b"), &out), ACME_OK);
     A.buffer_free(out);
-    EQ(A.stream_next(s, &f), ACME_OK);
-    EQ(A.stream_next(s, &f2), ACME_ERR_BUSY); /* one pull at a time */
     EQ(await_take(f, &out), ACME_OK);
     const uint8_t msg_case[] = {0x92, 0x03};
     CHECK(starts(out, msg_case, 2) && has(out, "hello \xf0\x9f\x91\x8b"), "message-received event");
