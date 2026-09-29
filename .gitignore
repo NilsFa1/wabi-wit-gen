@@ -1,0 +1,8 @@
+target/
+bin/
+obj/
+out/
+*.class
+/client-sdk/build/
+.zig-cache/
+zig-out/

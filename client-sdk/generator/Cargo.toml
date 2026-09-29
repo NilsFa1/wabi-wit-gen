@@ -1,0 +1,8 @@
+[package]
+name = "acme-wit-gen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wit-parser = "0.259"
+anyhow = "1"
