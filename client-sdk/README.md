@@ -16,8 +16,8 @@ und dessen **Implementierungssprache austauschbar** bleibt.
                  abi/acme_client.h  (17 Funktionen)       ← stabiles Implementierungsprotokoll
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼
-      Rust Core            Go Core             Zig Core   ← austauschbar
-   (tokio, WebSocket)   (goroutines)        (eager Stub)
+      Rust Core        Go Core        Zig Core       C# Core      ← austauschbar
+   (tokio, WS)      (goroutines)   (eager Stub)   (NativeAOT)
 ```
 
 Später zusätzlich: `client.wit → Canonical ABI → client.component.wasm`
@@ -33,6 +33,7 @@ Später zusätzlich: `client.wit → Canonical ABI → client.component.wasm`
 | Rust (`core-rust`, tokio) | ✅ ~2950 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
 | Go (`alt-cores/go`, cgo) | ✅ ~2980 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
 | Zig (`alt-cores/zig`, eager Stub) | ✅ basic-Profil | ✅ 7/7 basic | ✅ 7/7 basic | ✅ 7/7 basic | ✅ 7/7 basic |
+| **C#** (`alt-cores/csharp`, NativeAOT → `.so`) | ✅ ~2980 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
 
 Abgedeckt: Sync Call, Async Call, Async Error, Cancellation, Cancel/Completion-
 Race, Stream, Stream Cancellation, Object Lifetime, Double Drop, Concurrent
@@ -141,6 +142,7 @@ core-rust/                Rust-Core
   src/ffi/                  generischer ABI-Adapter — die einzige Datei mit extern "C"
 alt-cores/go/             alternativer Core in Go (cgo, c-shared)
 alt-cores/zig/            alternativer Stub-Core in Zig (eager, single-threaded)
+alt-cores/csharp/         alternativer Core in C#, per NativeAOT zu einer nativen .so kompiliert
 examples/{csharp,java,swift,dart}
 tests/abi/conformance.c   sprachneutrale ABI-Konformität (dlopen, jeder Core)
 tests/compatibility/      Matrix-Runner + absichtlich inkompatible Fake-Cores
@@ -148,6 +150,7 @@ tests/{csharp,java}       SDK-Testsuiten (Swift: sdk/swift/Tests, Dart: sdk/dart
 scripts/                  test-all.sh, build-native.sh, zig-cc.sh
 docs/COMPONENT_MODEL.md   Weg zu client.component.wasm
 docs/FLUTTER.md           Dart-SDK in Flutter-Apps
+docs/CORE_LANGUAGES.md    Bewertung: C# (NativeAOT, nachgewiesen) und Kotlin/Native als Core-Sprache
 docs/ROADMAP.md           geplant: Generator-Emitter in Bun/TypeScript, JNI-Backend, …
 ```
 

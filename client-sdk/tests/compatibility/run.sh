@@ -17,7 +17,7 @@ have_zig() { have zig || python3 -c "import ziglang" 2>/dev/null; }
 echo "== building cores"
 (cd "$ROOT/core-rust" && cargo build --release --quiet)
 declare -A LIB=( [rust]="${CARGO_TARGET_DIR:-$ROOT/core-rust/target}/release/libacme_client.so" )
-declare -A PROFILE=( [rust]=full [go]=full [zig]=basic )
+declare -A PROFILE=( [rust]=full [go]=full [zig]=basic [csharp]=full )
 if have go; then
   (cd "$ROOT/alt-cores/go" && CGO_ENABLED=1 go build -buildmode=c-shared -o "$B/go/libacme_client.so" .)
   LIB[go]="$B/go/libacme_client.so"
@@ -26,6 +26,12 @@ if have_zig; then
   (cd "$ROOT/alt-cores/zig" && zigc build-lib -dynamic -lc -O ReleaseSafe acme_core.zig -femit-bin="$B/zig/libacme_client.so")
   rm -f "$ROOT/alt-cores/zig"/*.o
   LIB[zig]="$B/zig/libacme_client.so"
+fi
+
+if have dotnet; then # C# core, compiled ahead-of-time to a plain native library (NativeAOT)
+  (cd "$ROOT/alt-cores/csharp" && dotnet publish -c Release -r linux-x64 -nologo -v q -o "$B/csharp-core/publish" >/dev/null)
+  mkdir -p "$B/csharp-core" && cp "$B/csharp-core/publish/acme_client.so" "$B/csharp-core/libacme_client.so"
+  LIB[csharp]="$B/csharp-core/libacme_client.so"
 fi
 
 echo "== building test fixtures and SDK test binaries"
@@ -55,7 +61,7 @@ run() { # name, command...
   grep -E "passed|checks" "$B/last.log" | tail -1 | sed 's/^/        /'
 }
 
-for core in ${CORES:-rust go zig}; do
+for core in ${CORES:-rust go zig csharp}; do
   lib="${LIB[$core]:-}"
   [ -n "$lib" ] || { SUMMARY+=("SKIP  $core core (toolchain missing)"); continue; }
   prof="${PROFILE[$core]}"
