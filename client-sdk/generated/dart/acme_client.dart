@@ -4,10 +4,10 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:acme_client/src/generated/abi_constants.dart';
-import 'package:acme_client/src/generated/types.dart';
-import 'package:acme_client/src/generated/wire_codec.dart';
-import 'package:acme_client/src/runtime/runtime.dart';
+import 'abi_constants.dart';
+import 'types.dart';
+import 'wire_codec.dart';
+import '../runtime/runtime.dart';
 
 /// One logical connection to the backend. Owns one WebSocket; all requests
 /// are multiplexed over it and correlated by request id.

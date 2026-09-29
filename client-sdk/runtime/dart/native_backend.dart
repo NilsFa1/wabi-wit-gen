@@ -6,8 +6,8 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:acme_client/src/generated/abi_constants.dart';
-import 'package:acme_client/src/generated/native_abi.dart';
+import '../generated/abi_constants.dart';
+import '../generated/native_abi.dart';
 import 'package:ffi/ffi.dart';
 
 import 'backend.dart';

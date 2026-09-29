@@ -308,7 +308,7 @@ fn constants(m: &Model) -> String {
     w!(o, "/// ABI {}.{} status codes and capability bits (mirrors abi/acme_abi.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
     w!(o, "public enum AcmeAbi {{");
     w!(o, "    public static let major: UInt32 = {}", abi_table::ABI_MAJOR);
-    w!(o, "    public static let minor: UInt32 = {}", abi_table::ABI_MINOR);
+    w!(o, "    public static let minor: UInt32 = {} // minimum this package needs", m.required_abi_minor());
     for (n, v) in abi_table::STATUSES {
         w!(o, "    public static let {}: Int32 = {v}", camel(&n.to_ascii_lowercase().replace('_', "-")));
     }
@@ -333,6 +333,7 @@ fn swift_c(t: abi_table::CTy) -> &'static str {
         Callback => "acme_future_callback!",
         VoidPtr => "UnsafeMutableRawPointer?",
         CStr => "UnsafePointer<CChar>!",
+        HostHandler => "acme_host_handler!",
     }
 }
 
@@ -343,7 +344,8 @@ fn native_abi(m: &Model) -> String {
     w!(o, "import CAcmeClient");
     w!(o, "");
     w!(o, "// Symbol prefix of package {}: `{}_`.", m.contract_id(), m.symbol_prefix());
-    for f in abi_table::FUNCTIONS {
+    // Host calls (ABI 1.1) are not supported by the Swift runtime yet.
+    for f in abi_table::FUNCTIONS.iter().filter(|f| !f.host_call) {
         let ps: Vec<String> = f.params.iter().map(|(t, n)| format!("_ {n}: {}", swift_c(*t))).collect();
         let args: Vec<&str> = f.params.iter().map(|(_, n)| *n).collect();
         let ret = if f.ret == abi_table::CTy::Void { String::new() } else { format!(" -> {}", swift_c(f.ret)) };

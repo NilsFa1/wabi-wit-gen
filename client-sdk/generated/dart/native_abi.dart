@@ -22,7 +22,10 @@ final class AcmeBuffer extends Struct {
 /// void (*acme_future_callback)(void* user_data, uint64_t future)
 typedef AcmeFutureCallback = Void Function(Pointer<Void>, Uint64);
 
-/// dart:ffi bindings of the generic Acme native ABI 1.0. This list does not grow
+/// void (*acme_host_handler)(void*, uint32_t method_id, const uint8_t* req, size_t len, uint64_t call) — ABI 1.1
+typedef AcmeHostHandler = Void Function(Pointer<Void>, Uint32, Pointer<Uint8>, Size, Uint64);
+
+/// dart:ffi bindings of the generic Acme native ABI 1.1. This list does not grow
 /// when WIT functions are added: those are addressed by method id.
 final class NativeAbi {
   NativeAbi(DynamicLibrary lib)
@@ -42,7 +45,9 @@ final class NativeAbi {
         acme_future_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_future_drop'),
         acme_stream_next = lib.lookupFunction<Int32 Function(Uint64, Pointer<Uint64>), int Function(int, Pointer<Uint64>)>('acme_client_stream_next'),
         acme_stream_cancel = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_stream_cancel'),
-        acme_stream_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_stream_drop');
+        acme_stream_drop = lib.lookupFunction<Int32 Function(Uint64), int Function(int)>('acme_client_stream_drop'),
+        acme_host_register = lib.providesSymbol('acme_client_host_register') ? lib.lookupFunction<Int32 Function(Pointer<NativeFunction<AcmeHostHandler>>, Pointer<Void>), int Function(Pointer<NativeFunction<AcmeHostHandler>>, Pointer<Void>)>('acme_client_host_register') : null,
+        acme_host_reply = lib.providesSymbol('acme_client_host_reply') ? lib.lookupFunction<Int32 Function(Uint64, Int32, AcmeBytes), int Function(int, int, AcmeBytes)>('acme_client_host_reply') : null;
 
   final int Function() acme_abi_version;
   final int Function() acme_abi_capabilities;
@@ -61,4 +66,6 @@ final class NativeAbi {
   final int Function(int stream, Pointer<Uint64> outFuture) acme_stream_next;
   final int Function(int stream) acme_stream_cancel;
   final int Function(int stream) acme_stream_drop;
+  final int Function(Pointer<NativeFunction<AcmeHostHandler>> handler, Pointer<Void> userData)? acme_host_register;
+  final int Function(int call, int status, AcmeBytes response)? acme_host_reply;
 }

@@ -62,6 +62,7 @@ fn rust_c(t: crate::abi_table::CTy) -> &'static str {
         Callback => "acme_future_callback",
         VoidPtr => "*mut std::ffi::c_void",
         CStr => "*const std::ffi::c_char",
+        HostHandler => unreachable!("host calls are not implemented by the Rust core yet"),
     }
 }
 
@@ -74,7 +75,7 @@ fn emit_exports(o: &mut String, m: &Model) {
     w!(o, "pub mod exports {{");
     w!(o, "    use crate::ffi::abi_types::*;");
     w!(o, "    use crate::ffi::exports as adapter;");
-    for f in crate::abi_table::FUNCTIONS {
+    for f in crate::abi_table::FUNCTIONS.iter().filter(|f| !f.host_call) {
         let ps: Vec<String> = f.params.iter().map(|(t, n)| format!("{}: {}", snake_param(n), rust_c(*t))).collect();
         let args: Vec<String> = f.params.iter().map(|(_, n)| snake_param(n)).collect();
         let ret = if f.ret == crate::abi_table::CTy::Void { String::new() } else { format!(" -> {}", rust_c(f.ret)) };

@@ -35,6 +35,8 @@ ACME_API acme_status acme_client_future_drop(uint64_t future);
 ACME_API acme_status acme_client_stream_next(uint64_t stream, uint64_t *out_future);
 ACME_API acme_status acme_client_stream_cancel(uint64_t stream);
 ACME_API acme_status acme_client_stream_drop(uint64_t stream);
+ACME_API acme_status acme_client_host_register(acme_host_handler handler, void *user_data);
+ACME_API acme_status acme_client_host_reply(uint64_t call, acme_status status, acme_bytes response);
 
 #ifdef __cplusplus
 }

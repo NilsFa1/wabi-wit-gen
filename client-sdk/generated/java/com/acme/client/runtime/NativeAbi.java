@@ -6,7 +6,7 @@ import java.lang.invoke.MethodHandle;
 import static java.lang.foreign.ValueLayout.*;
 
 /**
- * Panama FFM bindings of the generic Acme native ABI 1.0 (abi/acme_abi.h).
+ * Panama FFM bindings of the generic Acme native ABI 1.1 (abi/acme_abi.h).
  * Java 22+ only; Android and older JVMs use the JNI backend instead.
  * This list does not grow when WIT functions are added: those are addressed by method id.
  */
@@ -34,6 +34,8 @@ public final class NativeAbi {
     private final MethodHandle acme_stream_next;
     private final MethodHandle acme_stream_cancel;
     private final MethodHandle acme_stream_drop;
+    private final MethodHandle acme_host_register;
+    private final MethodHandle acme_host_reply;
 
     public NativeAbi(SymbolLookup lookup) {
         if (Linker.nativeLinker().canonicalLayouts().get("size_t").byteSize() != 8) {
@@ -57,6 +59,8 @@ public final class NativeAbi {
         acme_stream_next = linker.downcallHandle(find(lookup, "acme_client_stream_next"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG, ADDRESS));
         acme_stream_cancel = linker.downcallHandle(find(lookup, "acme_client_stream_cancel"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
         acme_stream_drop = linker.downcallHandle(find(lookup, "acme_client_stream_drop"), FunctionDescriptor.of(JAVA_INT, JAVA_LONG));
+        acme_host_register = lookup.find("acme_client_host_register").map(s -> linker.downcallHandle(s, FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS))).orElse(null);
+        acme_host_reply = lookup.find("acme_client_host_reply").map(s -> linker.downcallHandle(s, FunctionDescriptor.of(JAVA_INT, JAVA_LONG, JAVA_INT, ACME_BYTES))).orElse(null);
     }
 
     private static MemorySegment find(SymbolLookup lookup, String name) {
@@ -200,6 +204,24 @@ public final class NativeAbi {
     public int acme_stream_drop(long stream) {
         try {
             return (int) acme_stream_drop.invokeExact(stream);
+        } catch (Throwable t) {
+            throw rethrow(t);
+        }
+    }
+
+    public int acme_host_register(MemorySegment handler, MemorySegment userData) {
+        if (acme_host_register == null) throw new AcmeIncompatibleLibraryException("native core does not support host calls");
+        try {
+            return (int) acme_host_register.invokeExact(handler, userData);
+        } catch (Throwable t) {
+            throw rethrow(t);
+        }
+    }
+
+    public int acme_host_reply(long call, int status, MemorySegment response) {
+        if (acme_host_reply == null) throw new AcmeIncompatibleLibraryException("native core does not support host calls");
+        try {
+            return (int) acme_host_reply.invokeExact(call, status, response);
         } catch (Throwable t) {
             throw rethrow(t);
         }

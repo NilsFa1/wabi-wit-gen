@@ -25,7 +25,7 @@ abstract final class MethodIds {
   static const clientEvents = 0x0107;
 }
 
-/// ABI 1.0 status codes (abi/acme_abi.h).
+/// ABI 1.1 status codes (abi/acme_abi.h).
 abstract final class AcmeStatus {
   static const ok = 0;
   static const pending = 1;
@@ -44,11 +44,14 @@ abstract final class AcmeStatus {
 /// ABI capability bits.
 abstract final class AcmeCapabilities {
   static const abiMajor = 1;
+  /// Minimum ABI minor this package needs (1 if it uses host calls).
   static const abiMinor = 0;
+  static const requiresHostCalls = false;
   static const syncCalls = 1 << 0;
   static const asyncCalls = 1 << 1;
   static const streams = 1 << 2;
   static const cancellation = 1 << 3;
   static const threadedCallback = 1 << 4;
   static const payloadMsgpack1 = 1 << 5;
+  static const hostCalls = 1 << 6;
 }

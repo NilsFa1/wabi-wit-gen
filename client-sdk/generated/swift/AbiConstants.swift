@@ -23,10 +23,10 @@ enum MethodIds {
     static let clientEvents: UInt32 = 0x0107
 }
 
-/// ABI 1.0 status codes and capability bits (mirrors abi/acme_abi.h).
+/// ABI 1.1 status codes and capability bits (mirrors abi/acme_abi.h).
 public enum AcmeAbi {
     public static let major: UInt32 = 1
-    public static let minor: UInt32 = 0
+    public static let minor: UInt32 = 0 // minimum this package needs
     public static let ok: Int32 = 0
     public static let pending: Int32 = 1
     public static let ready: Int32 = 2
@@ -45,4 +45,5 @@ public enum AcmeAbi {
     public static let capCancellation: UInt64 = 1 << 3
     public static let capThreadedCallback: UInt64 = 1 << 4
     public static let capPayloadMsgpack1: UInt64 = 1 << 5
+    public static let capHostCalls: UInt64 = 1 << 6
 }

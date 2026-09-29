@@ -20,6 +20,7 @@ macro_rules! w {
 mod abi_table;
 mod gen_csharp;
 mod gen_dart;
+mod gen_go;
 mod gen_java;
 mod gen_rust;
 mod gen_swift;
@@ -30,6 +31,47 @@ mod names;
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
+/// `acme-gen.conf` next to `wit/`: which targets to generate and where.
+///
+///   abi      = abi                              (dir with acme_abi.h, relative)
+///   targets  = c csharp java swift dart rust go
+///   rust_out = core-rust/src/generated/mod.rs   (Rust core glue)
+///   go_out   = alt-cores/go/acme_generated.go   (Go core glue)
+struct Config {
+    abi: PathBuf,
+    targets: Vec<String>,
+    rust_out: Option<PathBuf>,
+    go_out: Option<PathBuf>,
+}
+
+impl Config {
+    fn load(root: &Path) -> Result<Config> {
+        let path = root.join("acme-gen.conf");
+        let text = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let mut c = Config { abi: "abi".into(), targets: vec![], rust_out: None, go_out: None };
+        for (n, line) in text.lines().enumerate() {
+            let line = line.split('#').next().unwrap().trim();
+            if line.is_empty() {
+                continue;
+            }
+            let (k, v) = line.split_once('=').with_context(|| format!("{}:{}: expected key = value", path.display(), n + 1))?;
+            let v = v.trim();
+            match k.trim() {
+                "abi" => c.abi = v.into(),
+                "targets" => c.targets = v.split_whitespace().map(String::from).collect(),
+                "rust_out" => c.rust_out = Some(v.into()),
+                "go_out" => c.go_out = Some(v.into()),
+                other => bail!("{}:{}: unknown key `{other}`", path.display(), n + 1),
+            }
+        }
+        Ok(c)
+    }
+
+    fn has(&self, t: &str) -> bool {
+        self.targets.iter().any(|x| x == t)
+    }
+}
+
 fn main() -> Result<()> {
     let mut root = PathBuf::from(".");
     let mut check = false;
@@ -39,12 +81,13 @@ fn main() -> Result<()> {
             "--root" => root = PathBuf::from(args.next().context("--root needs a value")?),
             "--check" => check = true,
             "-h" | "--help" => {
-                println!("usage: acme-wit-gen --root <client-sdk dir> [--check]");
+                println!("usage: acme-wit-gen --root <package dir containing wit/ and acme-gen.conf> [--check]");
                 return Ok(());
             }
             other => bail!("unknown argument {other}"),
         }
     }
+    let cfg = Config::load(&root)?;
 
     let wit_dir = root.join("wit");
     let lock_path = wit_dir.join("abi-ids.lock");
@@ -55,22 +98,38 @@ fn main() -> Result<()> {
     let (pkg, _) = resolve.push_dir(&wit_dir)?;
     let model = ir::build(&resolve, pkg, &mut lock)?;
 
-    abi_table::check_header(&root.join("abi"))?;
+    abi_table::check_header(&root.join(&cfg.abi))?;
 
     let mut outputs: Vec<(PathBuf, String)> = vec![(lock_path, lock.render())];
-    outputs.push((root.join("core-rust/src/generated/mod.rs"), gen_rust::emit(&model)));
-    outputs.push((root.join(format!("generated/c/{}.h", model.symbol_prefix())), abi_table::emit_c_header(&model)));
-    for (name, text) in gen_csharp::emit(&model) {
-        outputs.push((root.join("generated/csharp").join(name), text));
+    if cfg.has("c") {
+        outputs.push((root.join(format!("generated/c/{}.h", model.symbol_prefix())), abi_table::emit_c_header(&model)));
     }
-    for (name, text) in gen_java::emit(&model) {
-        outputs.push((root.join("generated/java").join(name), text));
+    if cfg.has("rust") {
+        if model.needs_host_calls() {
+            bail!("target rust: host calls (WIT imports) are not implemented for the Rust core yet");
+        }
+        let out = cfg.rust_out.as_ref().context("target rust needs rust_out")?;
+        outputs.push((root.join(out), gen_rust::emit(&model)));
     }
-    for (name, text) in gen_swift::emit(&model) {
-        outputs.push((root.join("generated/swift").join(name), text));
+    if cfg.has("go") {
+        let out = cfg.go_out.as_ref().context("target go needs go_out")?;
+        // cgo include path from the generated file's directory to the ABI headers
+        let depth = out.parent().map(|p| p.components().count()).unwrap_or(0);
+        let abi_rel = format!("{}{}", "../".repeat(depth), cfg.abi.display());
+        outputs.push((root.join(out), gen_go::emit(&model, &abi_rel)?));
     }
-    for (name, text) in gen_dart::emit(&model) {
-        outputs.push((root.join("generated/dart").join(name), text));
+    let langs: [(&str, fn(&ir::Model) -> Vec<(String, String)>); 4] =
+        [("csharp", gen_csharp::emit), ("java", gen_java::emit), ("swift", gen_swift::emit), ("dart", gen_dart::emit)];
+    for (lang, emit) in langs {
+        if !cfg.has(lang) {
+            continue;
+        }
+        if lang == "swift" && model.needs_host_calls() {
+            bail!("target swift: host calls (WIT imports) are not implemented for Swift yet");
+        }
+        for (name, text) in emit(&model) {
+            outputs.push((root.join("generated").join(lang).join(name), text));
+        }
     }
 
     let mut stale = vec![];
@@ -89,7 +148,13 @@ fn main() -> Result<()> {
     if !stale.is_empty() {
         bail!("generated files are out of date (run acme-wit-gen):\n  {}", stale.join("\n  "));
     }
-    println!("{}: {} types, {} resources — up to date", model.contract_id(), model.types.len(), model.resources.len());
+    println!(
+        "{}: {} types, {} resources, {} host interfaces — up to date",
+        model.contract_id(),
+        model.types.len(),
+        model.resources.len(),
+        model.imports.len()
+    );
     Ok(())
 }
 

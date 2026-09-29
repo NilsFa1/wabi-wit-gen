@@ -44,7 +44,7 @@ extern "C" {
 /* ------------------------------------------------------------------------ */
 
 #define ACME_ABI_VERSION_MAJOR 1u
-#define ACME_ABI_VERSION_MINOR 0u
+#define ACME_ABI_VERSION_MINOR 1u /* 1.1: optional host calls (ACME_CAP_HOST_CALLS) */
 /* (major << 16) | minor. A host accepts a core iff major is equal and the
  * core's minor is >= the minor the host was generated against. */
 #define ACME_ABI_VERSION ((ACME_ABI_VERSION_MAJOR << 16) | ACME_ABI_VERSION_MINOR)
@@ -59,6 +59,9 @@ extern "C" {
                                                   from core threads (informative; an eager core
                                                   completes every future before returning it) */
 #define ACME_CAP_PAYLOAD_MSGPACK_1 (1ull << 5) /* payload encoding v1 (ABI.md §5)     */
+#define ACME_CAP_HOST_CALLS        (1ull << 6) /* ABI 1.1: core calls host-implemented
+                                                  WIT imports (<prefix>_host_register,
+                                                  <prefix>_host_reply; ABI.md §4a) */
 
 /* ------------------------------------------------------------------------ */
 /* Primitive types                                                           */
@@ -117,6 +120,18 @@ typedef int32_t acme_status;
  *   - may call any ABI function (e.g. acme_future_take).
  * It carries no result; the host calls <prefix>_future_take() afterwards. */
 typedef void (*acme_future_callback)(void *user_data, acme_future_handle future);
+
+/* Host-call handler (ABI 1.1, ABI.md §4a): the CORE calls the HOST to run a
+ * function of a WIT *import* (e.g. "sign with the key in the Secure Enclave").
+ *   - invoked on a core thread, never inside an ABI call made by the host,
+ *   - must return quickly; the host answers LATER, from any thread, with
+ *     exactly one <prefix>_host_reply(call, ...),
+ *   - request/request_len stay valid until that reply (so the host may read
+ *     them asynchronously); they encode the import's parameters (§5),
+ *   - may be invoked concurrently for different calls.
+ * Plain pointer + length (no struct by value) to suit every FFI. */
+typedef void (*acme_host_handler)(void *user_data, uint32_t method_id,
+                                  const uint8_t *request, size_t request_len, uint64_t call);
 
 /* The 17 functions are declared in acme_abi_functions.h under a per-package
  * symbol prefix (see there and ABI.md §1.1). */

@@ -6,25 +6,32 @@ use crate::abi_table::{self, CTy};
 use crate::ir::*;
 use crate::names::*;
 
-const PKG: &str = "com.acme.client";
-const DIR: &str = "com/acme/client";
+/// Package of the hand-written runtime (and its generated glue).
+const RT_PKG: &str = "com.acme.client.runtime";
+const RT_DIR: &str = "com/acme/client/runtime";
+
+/// `acme:client` -> `com.acme.client`, `gematik:zero` -> `com.gematik.zero`
+fn pkg(m: &Model) -> String {
+    format!("com.{}.{}", snake(&m.namespace), snake(&m.package))
+}
 
 pub fn emit(m: &Model) -> Vec<(String, String)> {
+    let dir = pkg(m).replace('.', "/");
     let mut files = vec![];
     for t in &m.types {
-        files.push((format!("{DIR}/{}.java", pascal(&t.name)), type_file(t)));
+        files.push((format!("{dir}/{}.java", pascal(&t.name)), type_file(m, t)));
         if t.is_error {
-            files.push((format!("{DIR}/{}.java", exception_name(&t.name)), exception_file(t)));
+            files.push((format!("{dir}/{}.java", exception_name(&t.name)), exception_file(m, t)));
         }
     }
-    files.push((format!("{DIR}/WireCodec.java"), codec(m)));
-    files.push((format!("{DIR}/MethodIds.java"), method_ids(m)));
+    files.push((format!("{dir}/WireCodec.java"), codec(m)));
+    files.push((format!("{dir}/MethodIds.java"), method_ids(m)));
     for r in &m.resources {
-        files.push((format!("{DIR}/{}.java", class_name(m, r)), resource(m, r)));
+        files.push((format!("{dir}/{}.java", class_name(m, r)), resource(m, r)));
     }
-    files.push((format!("{DIR}/runtime/NativeAbi.java"), native_abi(m)));
-    files.push((format!("{DIR}/runtime/AbiConstants.java"), abi_constants(m)));
-    files.push((format!("{DIR}/runtime/Contract.java"), contract(m)));
+    files.push((format!("{RT_DIR}/NativeAbi.java"), native_abi(m)));
+    files.push((format!("{RT_DIR}/AbiConstants.java"), abi_constants(m)));
+    files.push((format!("{RT_DIR}/Contract.java"), contract(m)));
     files
 }
 
@@ -153,9 +160,9 @@ fn default_value(t: &Ty) -> &'static str {
     }
 }
 
-fn type_file(t: &TypeDecl) -> String {
+fn type_file(m: &Model, t: &TypeDecl) -> String {
     let name = pascal(&t.name);
-    let mut o = header(PKG);
+    let mut o = header(&pkg(m));
     docs(&mut o, &t.docs, "");
     match &t.kind {
         TypeKind::Record(fields) => {
@@ -202,10 +209,10 @@ fn type_file(t: &TypeDecl) -> String {
     o
 }
 
-fn exception_file(t: &TypeDecl) -> String {
+fn exception_file(m: &Model, t: &TypeDecl) -> String {
     let name = pascal(&t.name);
     let ex = exception_name(&t.name);
-    let mut o = header(PKG);
+    let mut o = header(&pkg(m));
     w!(o, "/** Thrown (inside CompletionException/ExecutionException for futures) when an operation fails with a {{@link {name}}}. */");
     w!(o, "public final class {ex} extends com.acme.client.runtime.AcmeException {{");
     w!(o, "    private final {name} error;");
@@ -223,7 +230,7 @@ fn exception_file(t: &TypeDecl) -> String {
 }
 
 fn codec(m: &Model) -> String {
-    let mut o = header(PKG);
+    let mut o = header(&pkg(m));
     w!(o, "import com.acme.client.runtime.AcmeProtocolException;");
     w!(o, "import com.acme.client.runtime.MsgPackReader;");
     w!(o, "import com.acme.client.runtime.MsgPackWriter;");
@@ -335,7 +342,7 @@ fn codec(m: &Model) -> String {
 }
 
 fn method_ids(m: &Model) -> String {
-    let mut o = header(PKG);
+    let mut o = header(&pkg(m));
     w!(o, "/** Stable method ids (wit/abi-ids.lock). */");
     w!(o, "final class MethodIds {{");
     w!(o, "    private MethodIds() {{}}");
@@ -350,7 +357,7 @@ fn method_ids(m: &Model) -> String {
 
 fn contract(m: &Model) -> String {
     let (maj, min, _) = m.version_triple();
-    let mut o = header(&format!("{PKG}.runtime"));
+    let mut o = header(RT_PKG);
     w!(o, "/** The contract this SDK was generated from. */");
     w!(o, "public final class Contract {{");
     w!(o, "    private Contract() {{}}");
@@ -372,7 +379,7 @@ fn ok_type(f: &Func) -> Option<&Ty> {
 fn resource(m: &Model, r: &Resource) -> String {
     let cls = class_name(m, r);
     let rs = screaming(&r.name);
-    let mut o = header(PKG);
+    let mut o = header(&pkg(m));
     w!(o, "import com.acme.client.runtime.ClientBackend;");
     w!(o, "import com.acme.client.runtime.MsgPackReader;");
     w!(o, "import com.acme.client.runtime.MsgPackWriter;");
@@ -486,7 +493,7 @@ fn request_ind(o: &mut String, params: &[(String, Ty)], ind: &str) {
 
 /// Plain constants (no java.lang.foreign), shared by the Panama and JNI backends.
 fn abi_constants(m: &Model) -> String {
-    let mut o = header(&format!("{PKG}.runtime"));
+    let mut o = header(RT_PKG);
     w!(o, "/** Status codes, capability bits and version of the Acme native ABI (abi/acme_abi.h). */");
     w!(o, "public final class AbiConstants {{");
     w!(o, "    private AbiConstants() {{}}");
@@ -495,7 +502,9 @@ fn abi_constants(m: &Model) -> String {
     w!(o, "    public static final String LIBRARY = \"{}\";", m.symbol_prefix());
     w!(o, "    public static final String SYMBOL_PREFIX = \"{}_\";", m.symbol_prefix());
     w!(o, "    public static final int ABI_MAJOR = {};", abi_table::ABI_MAJOR);
-    w!(o, "    public static final int ABI_MINOR = {};", abi_table::ABI_MINOR);
+    w!(o, "    /** Minimum ABI minor this package needs (1 if it uses host calls). */");
+    w!(o, "    public static final int ABI_MINOR = {};", m.required_abi_minor());
+    w!(o, "    public static final boolean REQUIRES_HOST_CALLS = {};", m.needs_host_calls());
     w!(o, "");
     for (n, v) in abi_table::STATUSES {
         w!(o, "    public static final int ACME_{n} = {v};");
@@ -515,7 +524,7 @@ fn layout(t: CTy) -> &'static str {
         CTy::U64 | CTy::Handle => "JAVA_LONG",
         CTy::Bytes => "ACME_BYTES",
         CTy::Buffer => "ACME_BUFFER",
-        CTy::BufferPtr | CTy::HandlePtr | CTy::Callback | CTy::VoidPtr | CTy::CStr => "ADDRESS",
+        CTy::BufferPtr | CTy::HandlePtr | CTy::Callback | CTy::VoidPtr | CTy::CStr | CTy::HostHandler => "ADDRESS",
     }
 }
 
@@ -529,7 +538,7 @@ fn jtype(t: CTy) -> &'static str {
 }
 
 fn native_abi(m: &Model) -> String {
-    let mut o = header(&format!("{PKG}.runtime"));
+    let mut o = header(RT_PKG);
     w!(o, "import java.lang.foreign.*;");
     w!(o, "import java.lang.invoke.MethodHandle;");
     w!(o, "import static java.lang.foreign.ValueLayout.*;");
@@ -564,7 +573,12 @@ fn native_abi(m: &Model) -> String {
             a.extend(args);
             format!("FunctionDescriptor.of({})", a.join(", "))
         };
-        w!(o, "        {} = linker.downcallHandle(find(lookup, \"{}\"), {desc});", f.name, abi_table::symbol(&m.symbol_prefix(), f.name));
+        if f.host_call {
+            // ABI 1.1, optional: null unless the core has ACME_CAP_HOST_CALLS
+            w!(o, "        {} = lookup.find(\"{}\").map(s -> linker.downcallHandle(s, {desc})).orElse(null);", f.name, abi_table::symbol(&m.symbol_prefix(), f.name));
+        } else {
+            w!(o, "        {} = linker.downcallHandle(find(lookup, \"{}\"), {desc});", f.name, abi_table::symbol(&m.symbol_prefix(), f.name));
+        }
     }
     w!(o, "    }}");
     w!(o, "");
@@ -583,6 +597,9 @@ fn native_abi(m: &Model) -> String {
         let ret = jtype(f.ret);
         w!(o, "");
         w!(o, "    public {ret} {}({}) {{", f.name, ps.join(", "));
+        if f.host_call {
+            w!(o, "        if ({} == null) throw new AcmeIncompatibleLibraryException(\"native core does not support host calls\");", f.name);
+        }
         w!(o, "        try {{");
         if f.ret == CTy::Void {
             w!(o, "            {}.invokeExact({});", f.name, args.join(", "));

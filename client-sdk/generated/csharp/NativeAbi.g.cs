@@ -58,6 +58,7 @@ public enum AcmeCapabilities : ulong
     Cancellation = 1UL << 3,
     ThreadedCallback = 1UL << 4,
     PayloadMsgpack1 = 1UL << 5,
+    HostCalls = 1UL << 6,
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -75,13 +76,15 @@ internal unsafe struct AcmeBuffer
     public nuint Len;
 }
 
-/// <summary>P/Invoke declarations of the generic native ABI 1.0. This list does not
+/// <summary>P/Invoke declarations of the generic native ABI 1.1. This list does not
 /// grow when WIT functions are added: those are addressed by <see cref="MethodIds"/>.</summary>
 internal static unsafe class NativeAbi
 {
     public const string Library = "acme_client";
     public const uint AbiMajor = 1;
+    /// <summary>Minimum ABI minor this package needs (1 if it uses host calls).</summary>
     public const uint AbiMinor = 0;
+    public const bool RequiresHostCalls = false;
 
     [DllImport(Library, EntryPoint = "acme_client_abi_version", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern uint acme_abi_version();
@@ -133,4 +136,12 @@ internal static unsafe class NativeAbi
 
     [DllImport(Library, EntryPoint = "acme_client_stream_drop", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int acme_stream_drop(ulong stream);
+
+    /// <summary>ABI 1.1 host calls: only present in cores with ACME_CAP_HOST_CALLS (bound lazily).</summary>
+    [DllImport(Library, EntryPoint = "acme_client_host_register", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    public static extern int acme_host_register(IntPtr handler, IntPtr userData);
+
+    /// <summary>ABI 1.1 host calls: only present in cores with ACME_CAP_HOST_CALLS (bound lazily).</summary>
+    [DllImport(Library, EntryPoint = "acme_client_host_reply", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    public static extern int acme_host_reply(ulong call, int status, AcmeBytes response);
 }

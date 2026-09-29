@@ -9,7 +9,9 @@ public final class AbiConstants {
     public static final String LIBRARY = "acme_client";
     public static final String SYMBOL_PREFIX = "acme_client_";
     public static final int ABI_MAJOR = 1;
+    /** Minimum ABI minor this package needs (1 if it uses host calls). */
     public static final int ABI_MINOR = 0;
+    public static final boolean REQUIRES_HOST_CALLS = false;
 
     public static final int ACME_OK = 0;
     public static final int ACME_PENDING = 1;
@@ -30,4 +32,5 @@ public final class AbiConstants {
     public static final long ACME_CAP_CANCELLATION = 1L << 3;
     public static final long ACME_CAP_THREADED_CALLBACK = 1L << 4;
     public static final long ACME_CAP_PAYLOAD_MSGPACK_1 = 1L << 5;
+    public static final long ACME_CAP_HOST_CALLS = 1L << 6;
 }

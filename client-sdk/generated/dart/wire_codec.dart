@@ -3,8 +3,8 @@
 
 import 'dart:typed_data';
 
-import 'package:acme_client/src/generated/types.dart';
-import 'package:acme_client/src/runtime/runtime.dart';
+import 'types.dart';
+import '../runtime/runtime.dart';
 
 /// Payload encoding v1 for all contract types (see ABI.md §5). Internal.
 abstract final class WireCodec {

@@ -1,86 +1,66 @@
 package main
 
-// The Go core's "business logic": plain Go, no cgo. It implements the same
-// observable contract as the Rust core against an in-process backend
-// (mem:// endpoints), which is what the cross-language test suites use.
-// A production Go core would put its net/http + gorilla/websocket code here.
+// The Go core's business logic: plain Go against the GENERATED contract
+// types (acme_generated.go, from wit/client.wit). Everything ABI-related —
+// handles, futures, streams, codec, the exported C symbols — lives in the
+// generated file and the runtime module acme.example/acmeabi (runtime/go).
+// It implements the same observable contract as the Rust core against an
+// in-process backend (mem:// endpoints), which the cross-language tests use.
 
 import (
 	"context"
 	"strconv"
 	"sync"
 	"time"
+
+	acmeabi "acme.example/acmeabi"
 )
 
-type connState uint32
-
-const (
-	stateDisconnected connState = 1
-	stateConnecting   connState = 2
-	stateConnected    connState = 3
-)
-
-// clientError mirrors WIT `client-error`; tag values come from abi-ids.lock.
-type clientError struct {
-	tag uint64
-	msg string
-}
+const coreInfo = "acme-go-core/0.2.0 (goroutines, generated glue)"
 
 var (
-	errNotFound     = &clientError{tag: 1}
-	errUnauthorized = &clientError{tag: 2}
-	errDisconnected = &clientError{tag: 3}
+	errNotFound     = &ClientError{Tag: ClientErrorNotFound}
+	errUnauthorized = &ClientError{Tag: ClientErrorUnauthorized}
+	errDisconnected = &ClientError{Tag: ClientErrorDisconnected}
 )
 
-func networkError(m string) *clientError  { return &clientError{tag: 4, msg: m} }
-func protocolError(m string) *clientError { return &clientError{tag: 5, msg: m} }
-
-type customer struct {
-	id, name string
-	email    *string
+func networkError(m string) *ClientError {
+	return &ClientError{Tag: ClientErrorNetworkError, NetworkError: m}
 }
 
-type event struct {
-	tag      uint64 // 1 customer-updated, 2 connection-state-changed, 3 message-received
-	customer customer
-	state    connState
-	text     string
-}
-
-type options struct {
-	endpoint  string
-	apiKey    *string
-	timeoutMs uint64
+func protocolError(m string) *ClientError {
+	return &ClientError{Tag: ClientErrorProtocolError, ProtocolError: m}
 }
 
 type client struct {
-	opts options
+	opts ClientOptions
 
 	mu        sync.Mutex
-	state     connState
+	state     ConnectionState
 	closed    bool
 	conn      context.Context // live connection; cancelled on disconnect/hang-up/close
 	closeConn context.CancelFunc
-	subs      map[int]chan event
+	subs      map[int]chan ClientEvent
 	nextSub   int
-	customers map[string]customer
+	customers map[string]Customer
 	nextID    int
 }
 
-func newClient(o options) *client {
+// newClient is the constructor the generated dispatcher calls.
+func newClient(o ClientOptions) Client {
 	email := "erika@example.com"
 	return &client{
 		opts:      o,
-		state:     stateDisconnected,
-		subs:      map[int]chan event{},
-		customers: map[string]customer{"4711": {id: "4711", name: "Erika Mustermann", email: &email}},
+		state:     ConnectionStateDisconnected,
+		subs:      map[int]chan ClientEvent{},
+		customers: map[string]Customer{"4711": {Id: "4711", Name: "Erika Mustermann", Email: &email}},
 		nextID:    5000,
 	}
 }
 
 // publish must be called with c.mu held. Slow subscribers drop events
 // instead of blocking the core (same policy as the Rust core).
-func (c *client) publish(e event) {
+func (c *client) publish(e ClientEvent) {
 	for _, ch := range c.subs {
 		select {
 		case ch <- e:
@@ -89,20 +69,20 @@ func (c *client) publish(e event) {
 	}
 }
 
-func (c *client) setState(s connState) {
+func (c *client) setState(s ConnectionState) {
 	if c.state != s {
 		c.state = s
-		c.publish(event{tag: 2, state: s})
+		c.publish(ClientEvent{Tag: ClientEventConnectionStateChanged, ConnectionStateChanged: s})
 	}
 }
 
-func (c *client) getState() connState {
+func (c *client) State() ConnectionState {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.state
 }
 
-func (c *client) connect(ctx context.Context) *clientError {
+func (c *client) Connect(ctx context.Context) *ClientError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
@@ -111,20 +91,20 @@ func (c *client) connect(ctx context.Context) *clientError {
 	if c.conn != nil && c.conn.Err() == nil {
 		return nil
 	}
-	c.setState(stateConnecting)
+	c.setState(ConnectionStateConnecting)
 	switch {
-	case c.opts.endpoint == "mem://unreachable":
-		c.setState(stateDisconnected)
+	case c.opts.Endpoint == "mem://unreachable":
+		c.setState(ConnectionStateDisconnected)
 		return networkError("connection refused")
-	case len(c.opts.endpoint) < 6 || c.opts.endpoint[:6] != "mem://":
-		c.setState(stateDisconnected)
-		return networkError("go core supports mem:// endpoints only: " + c.opts.endpoint)
-	case c.opts.apiKey == nil || *c.opts.apiKey != "demo-key":
-		c.setState(stateDisconnected)
+	case len(c.opts.Endpoint) < 6 || c.opts.Endpoint[:6] != "mem://":
+		c.setState(ConnectionStateDisconnected)
+		return networkError("go core supports mem:// endpoints only: " + c.opts.Endpoint)
+	case c.opts.ApiKey == nil || *c.opts.ApiKey != "demo-key":
+		c.setState(ConnectionStateDisconnected)
 		return errUnauthorized
 	}
 	c.conn, c.closeConn = context.WithCancel(context.Background())
-	c.setState(stateConnected)
+	c.setState(ConnectionStateConnected)
 	return nil
 }
 
@@ -133,10 +113,10 @@ func (c *client) dropConnection() {
 		c.closeConn()
 		c.conn, c.closeConn = nil, nil
 	}
-	c.setState(stateDisconnected)
+	c.setState(ConnectionStateDisconnected)
 }
 
-func (c *client) disconnect() *clientError {
+func (c *client) Disconnect(context.Context) *ClientError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.dropConnection()
@@ -144,7 +124,7 @@ func (c *client) disconnect() *clientError {
 }
 
 // live returns the current connection context or `disconnected`.
-func (c *client) live() (context.Context, *clientError) {
+func (c *client) live() (context.Context, *ClientError) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn == nil || c.conn.Err() != nil {
@@ -153,36 +133,44 @@ func (c *client) live() (context.Context, *clientError) {
 	return c.conn, nil
 }
 
-func (c *client) getCustomer(id string) (customer, *clientError) {
+func (c *client) GetCustomer(_ context.Context, id string) (Customer, *ClientError) {
 	if _, err := c.live(); err != nil {
-		return customer{}, err
+		return Customer{}, err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if cu, ok := c.customers[id]; ok {
 		return cu, nil
 	}
-	return customer{}, errNotFound
+	return Customer{}, errNotFound
 }
 
-func (c *client) createCustomer(name string, email *string) (customer, *clientError) {
+func (c *client) CreateCustomer(_ context.Context, name string, email *string) (Customer, *ClientError) {
 	if _, err := c.live(); err != nil {
-		return customer{}, err
+		return Customer{}, err
 	}
 	if name == "" {
-		return customer{}, protocolError("name must not be empty")
+		return Customer{}, protocolError("name must not be empty")
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.nextID++
-	cu := customer{id: strconv.Itoa(c.nextID), name: name, email: email}
-	c.customers[cu.id] = cu
-	c.publish(event{tag: 1, customer: cu})
+	cu := Customer{Id: strconv.Itoa(c.nextID), Name: name, Email: email}
+	c.customers[cu.Id] = cu
+	c.publish(ClientEvent{Tag: ClientEventCustomerUpdated, CustomerUpdated: cu})
 	return cu, nil
 }
 
-// sendCommand honours host cancellation (ctx) and connection loss.
-func (c *client) sendCommand(ctx context.Context, name string, payload []byte) ([]byte, *clientError) {
+// SendCommand honours host cancellation (ctx) and connection loss.
+func (c *client) SendCommand(ctx context.Context, cmd Command) (CommandResult, *ClientError) {
+	out, err := c.run(ctx, cmd.Name, cmd.Payload)
+	if err != nil {
+		return CommandResult{}, err
+	}
+	return CommandResult{Name: cmd.Name, Payload: out}, nil
+}
+
+func (c *client) run(ctx context.Context, name string, payload []byte) ([]byte, *ClientError) {
 	conn, err := c.live()
 	if err != nil {
 		return nil, err
@@ -192,14 +180,14 @@ func (c *client) sendCommand(ctx context.Context, name string, payload []byte) (
 		return payload, nil
 	case "broadcast":
 		c.mu.Lock()
-		c.publish(event{tag: 3, text: string(payload)})
+		c.publish(ClientEvent{Tag: ClientEventMessageReceived, MessageReceived: string(payload)})
 		c.mu.Unlock()
 		return []byte{}, nil
 	case "sleep":
 		ms, _ := strconv.Atoi(string(payload))
 		timeout := time.Duration(1<<62 - 1)
-		if c.opts.timeoutMs > 0 {
-			timeout = time.Duration(c.opts.timeoutMs) * time.Millisecond
+		if c.opts.RequestTimeoutMs > 0 {
+			timeout = time.Duration(c.opts.RequestTimeoutMs) * time.Millisecond
 		}
 		select {
 		case <-time.After(time.Duration(ms) * time.Millisecond):
@@ -222,10 +210,16 @@ func (c *client) sendCommand(ctx context.Context, name string, payload []byte) (
 	return nil, protocolError("unknown command `" + name + "`")
 }
 
-func (c *client) subscribe() (<-chan event, func()) {
+// Events opens an independent subscription; cancelling the stream unsubscribes.
+func (c *client) Events() acmeabi.Stream[ClientEvent] {
+	ch, unsubscribe := c.subscribe()
+	return acmeabi.Stream[ClientEvent]{C: ch, Cancel: unsubscribe}
+}
+
+func (c *client) subscribe() (<-chan ClientEvent, func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	ch := make(chan event, 1024)
+	ch := make(chan ClientEvent, 1024)
 	if c.closed {
 		close(ch)
 		return ch, func() {}
@@ -243,8 +237,8 @@ func (c *client) subscribe() (<-chan event, func()) {
 	}
 }
 
-// close is the resource destructor: fails in-flight work, ends all streams.
-func (c *client) close() {
+// Close is the resource destructor: fails in-flight work, ends all streams.
+func (c *client) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {

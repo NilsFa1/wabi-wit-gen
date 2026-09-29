@@ -3,7 +3,7 @@
 
 import 'dart:typed_data';
 
-import 'package:acme_client/src/runtime/runtime.dart';
+import '../runtime/runtime.dart';
 
 /// A customer as returned by the backend.
 final class Customer {

@@ -99,9 +99,31 @@ pub struct Model {
     pub version: String,
     pub types: Vec<TypeDecl>,
     pub resources: Vec<Resource>,
+    /// WIT interfaces the world IMPORTS: implemented by the host (app), called
+    /// by the core through the ABI 1.1 host calls.
+    pub imports: Vec<HostInterface>,
+}
+
+/// An imported interface: freestanding functions the APP implements.
+#[derive(Debug, Clone)]
+pub struct HostInterface {
+    pub name: String,
+    pub group: u32,
+    pub funcs: Vec<Func>,
+    pub docs: Option<String>,
 }
 
 impl Model {
+    /// Host calls need ABI 1.1 + ACME_CAP_HOST_CALLS; everything else runs on 1.0.
+    pub fn needs_host_calls(&self) -> bool {
+        !self.imports.is_empty()
+    }
+
+    /// Minimum ABI minor version an SDK for this package requires from a core.
+    pub fn required_abi_minor(&self) -> u32 {
+        if self.needs_host_calls() { 1 } else { 0 }
+    }
+
     /// `acme:client@1.0.0`
     pub fn contract_id(&self) -> String {
         format!("{}:{}@{}", self.namespace, self.package, self.version)
@@ -131,7 +153,21 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
         version: pname.version.as_ref().map(|v| v.to_string()).unwrap_or_else(|| "0.0.0".into()),
         types: vec![],
         resources: vec![],
+        imports: vec![],
     };
+
+    // Interfaces of this package that a world imports (and that have functions)
+    // are implemented by the host, not by the core.
+    let mut imported = std::collections::HashSet::new();
+    for wid in package.worlds.values() {
+        for item in resolve.worlds[*wid].imports.values() {
+            if let wit_parser::WorldItem::Interface { id, .. } = item {
+                if resolve.interfaces[*id].package == Some(pkg) && !resolve.interfaces[*id].functions.is_empty() {
+                    imported.insert(*id);
+                }
+            }
+        }
+    }
 
     let mut error_types = vec![];
 
@@ -200,6 +236,30 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
             model.types.push(TypeDecl { name: tname.clone(), kind, docs, is_error: false });
         }
 
+        if imported.contains(&iid) {
+            let group = lock.group(&format!("{prefix}/{iface_name}"));
+            let mut funcs = vec![];
+            for func in iface.functions.values() {
+                if func.kind.resource().is_some() {
+                    bail!("imported interface `{iface_name}`: resources are not supported for host calls yet");
+                }
+                let item = func.item_name().to_string();
+                let id = lock.method(group, &q(&item), false)?;
+                let params = func
+                    .params
+                    .iter()
+                    .map(|p| Ok((p.name.clone(), ty(resolve, &p.ty)?)))
+                    .collect::<Result<Vec<_>>>()?;
+                let ret = ret_of(resolve, func, &mut error_types)?;
+                if matches!(ret, Ret::Value(Ty::Stream(_))) {
+                    bail!("`{}`: streams are not supported for host calls yet", func.name);
+                }
+                funcs.push(Func { name: item, id, is_async: func.kind.is_async(), params, ret, docs: func.docs.contents.clone() });
+            }
+            model.imports.push(HostInterface { name: iface_name.clone(), group, funcs, docs: iface.docs.contents.clone() });
+            continue;
+        }
+
         for func in iface.functions.values() {
             let rid = match func.kind.resource() {
                 Some(rid) => rid,
@@ -225,22 +285,7 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
             if matches!(func.kind, FunctionKind::Static(_) | FunctionKind::AsyncStatic(_)) {
                 bail!("static function `{}` is not supported by this generator yet", func.name);
             }
-            let ret = if is_ctor {
-                Ret::Unit
-            } else {
-                match &func.result {
-                    None => Ret::Unit,
-                    Some(Type::Id(t)) if matches!(resolve.types[*t].kind, TypeDefKind::Result(_)) => {
-                        let TypeDefKind::Result(r) = &resolve.types[*t].kind else { unreachable!() };
-                        let err = r.err.as_ref().map(|t| ty(resolve, t)).transpose()?;
-                        if let Some(Ty::Named(n)) = &err {
-                            error_types.push(n.clone());
-                        }
-                        Ret::Result { ok: r.ok.as_ref().map(|t| ty(resolve, t)).transpose()?, err }
-                    }
-                    Some(t) => Ret::Value(ty(resolve, t)?),
-                }
-            };
+            let ret = if is_ctor { Ret::Unit } else { ret_of(resolve, func, &mut error_types)? };
             if let Ret::Value(Ty::Stream(_)) = ret {
                 if func.kind.is_async() {
                     bail!("`{}`: return a stream from a sync func (the stream itself is async)", func.name);
@@ -267,6 +312,21 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
     }
     lock.retire_untouched();
     Ok(model)
+}
+
+fn ret_of(resolve: &Resolve, func: &wit_parser::Function, error_types: &mut Vec<String>) -> Result<Ret> {
+    Ok(match &func.result {
+        None => Ret::Unit,
+        Some(Type::Id(t)) if matches!(resolve.types[*t].kind, TypeDefKind::Result(_)) => {
+            let TypeDefKind::Result(r) = &resolve.types[*t].kind else { unreachable!() };
+            let err = r.err.as_ref().map(|t| ty(resolve, t)).transpose()?;
+            if let Some(Ty::Named(n)) = &err {
+                error_types.push(n.clone());
+            }
+            Ret::Result { ok: r.ok.as_ref().map(|t| ty(resolve, t)).transpose()?, err }
+        }
+        Some(t) => Ret::Value(ty(resolve, t)?),
+    })
 }
 
 fn resource_name(resolve: &Resolve, mut id: TypeId, iid: InterfaceId) -> Result<String> {

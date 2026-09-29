@@ -1,5 +1,6 @@
 /*
- * acme_abi_functions.h — the 17 functions of the Acme native ABI v1.0.
+ * acme_abi_functions.h — the functions of the Acme native ABI v1.1
+ * (17 core functions + 2 optional host-call functions).
  *
  * Every WIT package exports these functions under its own SYMBOL PREFIX,
  * derived from the package name (ABI.md §1.1):
@@ -126,6 +127,22 @@ ACME_API acme_status ACME_FN(stream_cancel)(acme_stream_handle stream);
 /* Cancels (if needed) and releases the stream handle. */
 ACME_API acme_status ACME_FN(stream_drop)(acme_stream_handle stream);
 
+
+/* ------------------------------------------------------------------------ */
+/* Host calls — ABI 1.1, only if ACME_CAP_HOST_CALLS (ABI.md §4a)            */
+/* ------------------------------------------------------------------------ */
+
+/* Installs the handler for all WIT imports of this package (one per
+ * process; NULL uninstalls). Until a handler is installed, core operations
+ * that need the host fail with a domain error or ACME_ERR_UNSUPPORTED. */
+ACME_API acme_status ACME_FN(host_register)(acme_host_handler handler, void *user_data);
+
+/* Completes a host call exactly once, from any thread. ACME_OK: `response`
+ * is the encoded return value of the import (§5); otherwise an ABI status
+ * (e.g. ACME_ERR_UNKNOWN_METHOD, ACME_ERR_INTERNAL) and an optional UTF-8
+ * diagnostic. The core copies `response`. Unknown/answered calls ->
+ * ACME_ERR_INVALID_HANDLE. */
+ACME_API acme_status ACME_FN(host_reply)(uint64_t call, acme_status status, acme_bytes response);
 #ifdef __cplusplus
 }
 #endif

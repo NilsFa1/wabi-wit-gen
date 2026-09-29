@@ -21,6 +21,8 @@ pub enum CTy {
     Callback,
     VoidPtr,
     CStr,
+    /// acme_host_handler (ABI 1.1)
+    HostHandler,
 }
 
 impl CTy {
@@ -38,6 +40,7 @@ impl CTy {
             CTy::Callback => "acme_future_callback",
             CTy::VoidPtr => "void*",
             CTy::CStr => "const char*",
+            CTy::HostHandler => "acme_host_handler",
         }
     }
 }
@@ -46,40 +49,39 @@ pub struct AbiFn {
     pub name: &'static str,
     pub ret: CTy,
     pub params: &'static [(CTy, &'static str)],
+    /// ABI 1.1 host-call functions: only exported by cores with
+    /// ACME_CAP_HOST_CALLS; bindings must treat them as optional.
+    pub host_call: bool,
+}
+
+impl AbiFn {
+    const fn core(name: &'static str, ret: CTy, params: &'static [(CTy, &'static str)]) -> AbiFn {
+        AbiFn { name, ret, params, host_call: false }
+    }
 }
 
 use CTy::*;
 
 pub const FUNCTIONS: &[AbiFn] = &[
-    AbiFn { name: "acme_abi_version", ret: U32, params: &[] },
-    AbiFn { name: "acme_abi_capabilities", ret: U64, params: &[] },
-    AbiFn { name: "acme_contract_id", ret: CStr, params: &[] },
-    AbiFn { name: "acme_core_info", ret: CStr, params: &[] },
-    AbiFn { name: "acme_status_name", ret: CStr, params: &[(Status, "status")] },
-    AbiFn { name: "acme_buffer_free", ret: Void, params: &[(Buffer, "buffer")] },
-    AbiFn {
-        name: "acme_call_sync",
-        ret: Status,
-        params: &[(Handle, "object"), (U32, "methodId"), (Bytes, "request"), (BufferPtr, "outResponse")],
-    },
-    AbiFn {
-        name: "acme_call_async",
-        ret: Status,
-        params: &[(Handle, "object"), (U32, "methodId"), (Bytes, "request"), (HandlePtr, "outFuture")],
-    },
-    AbiFn { name: "acme_object_drop", ret: Status, params: &[(Handle, "object")] },
-    AbiFn {
-        name: "acme_future_subscribe",
-        ret: Status,
-        params: &[(Handle, "future"), (Callback, "callback"), (VoidPtr, "userData")],
-    },
-    AbiFn { name: "acme_future_poll", ret: Status, params: &[(Handle, "future")] },
-    AbiFn { name: "acme_future_take", ret: Status, params: &[(Handle, "future"), (BufferPtr, "outResult")] },
-    AbiFn { name: "acme_future_cancel", ret: Status, params: &[(Handle, "future")] },
-    AbiFn { name: "acme_future_drop", ret: Status, params: &[(Handle, "future")] },
-    AbiFn { name: "acme_stream_next", ret: Status, params: &[(Handle, "stream"), (HandlePtr, "outFuture")] },
-    AbiFn { name: "acme_stream_cancel", ret: Status, params: &[(Handle, "stream")] },
-    AbiFn { name: "acme_stream_drop", ret: Status, params: &[(Handle, "stream")] },
+    AbiFn::core("acme_abi_version", U32, &[]),
+    AbiFn::core("acme_abi_capabilities", U64, &[]),
+    AbiFn::core("acme_contract_id", CStr, &[]),
+    AbiFn::core("acme_core_info", CStr, &[]),
+    AbiFn::core("acme_status_name", CStr, &[(Status, "status")]),
+    AbiFn::core("acme_buffer_free", Void, &[(Buffer, "buffer")]),
+    AbiFn::core("acme_call_sync", Status, &[(Handle, "object"), (U32, "methodId"), (Bytes, "request"), (BufferPtr, "outResponse")]),
+    AbiFn::core("acme_call_async", Status, &[(Handle, "object"), (U32, "methodId"), (Bytes, "request"), (HandlePtr, "outFuture")]),
+    AbiFn::core("acme_object_drop", Status, &[(Handle, "object")]),
+    AbiFn::core("acme_future_subscribe", Status, &[(Handle, "future"), (Callback, "callback"), (VoidPtr, "userData")]),
+    AbiFn::core("acme_future_poll", Status, &[(Handle, "future")]),
+    AbiFn::core("acme_future_take", Status, &[(Handle, "future"), (BufferPtr, "outResult")]),
+    AbiFn::core("acme_future_cancel", Status, &[(Handle, "future")]),
+    AbiFn::core("acme_future_drop", Status, &[(Handle, "future")]),
+    AbiFn::core("acme_stream_next", Status, &[(Handle, "stream"), (HandlePtr, "outFuture")]),
+    AbiFn::core("acme_stream_cancel", Status, &[(Handle, "stream")]),
+    AbiFn::core("acme_stream_drop", Status, &[(Handle, "stream")]),
+    AbiFn { name: "acme_host_register", ret: Status, params: &[(HostHandler, "handler"), (VoidPtr, "userData")], host_call: true },
+    AbiFn { name: "acme_host_reply", ret: Status, params: &[(U64, "call"), (Status, "status"), (Bytes, "response")], host_call: true },
 ];
 
 /// Status codes (name without `ACME_` prefix, value).
@@ -105,10 +107,11 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     ("CANCELLATION", 3),
     ("THREADED_CALLBACK", 4),
     ("PAYLOAD_MSGPACK_1", 5),
+    ("HOST_CALLS", 6),
 ];
 
 pub const ABI_MAJOR: u32 = 1;
-pub const ABI_MINOR: u32 = 0;
+pub const ABI_MINOR: u32 = 1;
 
 /// `acme_call_sync` (generic table name) -> `<prefix>_call_sync` (exported symbol).
 pub fn symbol(prefix: &str, generic: &str) -> String {
@@ -174,7 +177,8 @@ pub fn check_header(abi_dir: &Path) -> Result<()> {
     }
     for (name, bit) in CAPABILITIES {
         let needle = format!("ACME_CAP_{name}");
-        let line = text.lines().find(|l| l.contains(&needle)).with_context(|| format!("{needle} missing"))?;
+        let def = format!("#define {needle} ");
+        let line = text.lines().find(|l| l.starts_with(&def)).with_context(|| format!("{needle} missing"))?;
         if !line.contains(&format!("(1ull << {bit})")) {
             bail!("{needle}: bit mismatch with table");
         }
