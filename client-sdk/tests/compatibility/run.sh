@@ -63,8 +63,10 @@ for core in ${CORES:-rust go zig}; do
   echo "== core: $core ($prof profile)"
   run "$core / C ABI conformance" "$B/conformance" "$lib" --profile "$prof"
   [ $HAVE_DOTNET = 1 ] && run "$core / C# SDK tests" env ACME_NATIVE_LIB="$lib" dotnet "$B/csharp-tests/Acme.Client.Tests.dll" $flag
-  [ $HAVE_JAVA = 1 ] && run "$core / Java SDK tests" env ACME_NATIVE_LIB="$lib" \
-      java --enable-native-access=ALL-UNNAMED -cp "$B/java/acme-client.jar:$B/java/tests" AcmeClientTests $flag
+  [ $HAVE_JAVA = 1 ] && run "$core / Java SDK tests (Panama)" env ACME_NATIVE_LIB="$lib" \
+      java -Dacme.binding=panama --enable-native-access=ALL-UNNAMED -cp "$B/java/acme-client.jar:$B/java/tests" AcmeClientTests $flag
+  [ $HAVE_JAVA = 1 ] && [ -f "$B/java/libacme_jni.so" ] && run "$core / Java SDK tests (JNI, Android path)" env ACME_NATIVE_LIB="$lib" \
+      java -Dacme.binding=jni -Dacme.jni.lib="$B/java/libacme_jni.so" -cp "$B/java/acme-client.jar:$B/java/tests" AcmeClientTests $flag
   [ $HAVE_DART = 1 ] && run "$core / Dart SDK tests" dart_tests "$lib" "$prof"
 done
 

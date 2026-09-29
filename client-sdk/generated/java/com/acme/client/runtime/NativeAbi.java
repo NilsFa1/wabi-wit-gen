@@ -7,33 +7,10 @@ import static java.lang.foreign.ValueLayout.*;
 
 /**
  * Panama FFM bindings of the generic Acme native ABI 1.0 (abi/acme_client.h).
+ * Java 22+ only; Android and older JVMs use the JNI backend instead.
  * This list does not grow when WIT functions are added: those are addressed by method id.
  */
 public final class NativeAbi {
-    public static final String LIBRARY = "acme_client";
-    public static final int ABI_MAJOR = 1;
-    public static final int ABI_MINOR = 0;
-
-    public static final int ACME_OK = 0;
-    public static final int ACME_PENDING = 1;
-    public static final int ACME_READY = 2;
-    public static final int ACME_STREAM_END = 3;
-    public static final int ACME_ERR_INVALID_HANDLE = -1;
-    public static final int ACME_ERR_INVALID_ARGUMENT = -2;
-    public static final int ACME_ERR_UNKNOWN_METHOD = -3;
-    public static final int ACME_ERR_CANCELLED = -4;
-    public static final int ACME_ERR_BUSY = -5;
-    public static final int ACME_ERR_ALREADY_TAKEN = -6;
-    public static final int ACME_ERR_UNSUPPORTED = -7;
-    public static final int ACME_ERR_INTERNAL = -8;
-
-    public static final long ACME_CAP_SYNC_CALLS = 1L << 0;
-    public static final long ACME_CAP_ASYNC_CALLS = 1L << 1;
-    public static final long ACME_CAP_STREAMS = 1L << 2;
-    public static final long ACME_CAP_CANCELLATION = 1L << 3;
-    public static final long ACME_CAP_THREADED_CALLBACK = 1L << 4;
-    public static final long ACME_CAP_PAYLOAD_MSGPACK_1 = 1L << 5;
-
     /** struct acme_bytes / acme_buffer { uint8_t* ptr; size_t len; } (64-bit targets). */
     public static final StructLayout ACME_BYTES = MemoryLayout.structLayout(ADDRESS.withName("ptr"), JAVA_LONG.withName("len"));
     public static final StructLayout ACME_BUFFER = MemoryLayout.structLayout(ADDRESS.withName("ptr"), JAVA_LONG.withName("len"));

@@ -39,12 +39,18 @@ final class WireCodec {
     }
 
     static void writeClientError(MsgPackWriter w, ClientError v) {
-        switch (v) {
-            case ClientError.NotFound c -> { w.writeArrayHeader(1); w.writeUInt(1); }
-            case ClientError.Unauthorized c -> { w.writeArrayHeader(1); w.writeUInt(2); }
-            case ClientError.Disconnected c -> { w.writeArrayHeader(1); w.writeUInt(3); }
-            case ClientError.NetworkError c -> { w.writeArrayHeader(2); w.writeUInt(4); w.writeString(c.value()); }
-            case ClientError.ProtocolError c -> { w.writeArrayHeader(2); w.writeUInt(5); w.writeString(c.value()); }
+        if (v instanceof ClientError.NotFound c) {
+            w.writeArrayHeader(1); w.writeUInt(1);
+        } else if (v instanceof ClientError.Unauthorized c) {
+            w.writeArrayHeader(1); w.writeUInt(2);
+        } else if (v instanceof ClientError.Disconnected c) {
+            w.writeArrayHeader(1); w.writeUInt(3);
+        } else if (v instanceof ClientError.NetworkError c) {
+            w.writeArrayHeader(2); w.writeUInt(4); w.writeString(c.value());
+        } else if (v instanceof ClientError.ProtocolError c) {
+            w.writeArrayHeader(2); w.writeUInt(5); w.writeString(c.value());
+        } else {
+            throw new IllegalArgumentException("unknown ClientError case: " + v);
         }
     }
 
@@ -159,10 +165,14 @@ final class WireCodec {
     }
 
     static void writeClientEvent(MsgPackWriter w, ClientEvent v) {
-        switch (v) {
-            case ClientEvent.CustomerUpdated c -> { w.writeArrayHeader(2); w.writeUInt(1); WireCodec.writeCustomer(w, c.value()); }
-            case ClientEvent.ConnectionStateChanged c -> { w.writeArrayHeader(2); w.writeUInt(2); WireCodec.writeConnectionState(w, c.value()); }
-            case ClientEvent.MessageReceived c -> { w.writeArrayHeader(2); w.writeUInt(3); w.writeString(c.value()); }
+        if (v instanceof ClientEvent.CustomerUpdated c) {
+            w.writeArrayHeader(2); w.writeUInt(1); WireCodec.writeCustomer(w, c.value());
+        } else if (v instanceof ClientEvent.ConnectionStateChanged c) {
+            w.writeArrayHeader(2); w.writeUInt(2); WireCodec.writeConnectionState(w, c.value());
+        } else if (v instanceof ClientEvent.MessageReceived c) {
+            w.writeArrayHeader(2); w.writeUInt(3); w.writeString(c.value());
+        } else {
+            throw new IllegalArgumentException("unknown ClientEvent case: " + v);
         }
     }
 

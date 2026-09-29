@@ -32,10 +32,32 @@ acme-wit-gen (Rust, bleibt klein)            generator-ts (Bun)
   `tests/compatibility/run.sh` unverändert grün sein. Erst dann die
   Rust-Emitter entfernen.
 
+## Priorität HOCH (als Nächstes): Flutter-Paketierung über Dart „native assets“
+
+**Ziel:** Eine Flutter-App trägt nur `acme_client` in die `pubspec.yaml` ein.
+Es gibt keine manuellen Schritte für jniLibs, xcframework, DLL oder dylib mehr
+(heute nötig, siehe `docs/FLUTTER.md`).
+
+* `sdk/dart/hook/build.dart` (Dart native assets / `package:hooks`) liefert pro
+  Zielplattform und Architektur die passende `libacme_client` als `CodeAsset`.
+  Quelle: vorgebaute Artefakte aus `scripts/build-native.sh` (CI-Release) oder
+  optional ein lokaler `cargo build`.
+* Das SDK lädt die Bibliothek dann über das Asset (`@Native`/`DynamicLibrary`
+  per Asset-ID) statt per Namens- und Pfadkonvention; `ACME_NATIVE_LIB` bleibt
+  als Override für Tests.
+* Abnahme: eine Beispiel-App (`examples/flutter`) baut und läuft auf Android
+  (arm64 + x86_64-Emulator), iOS-Simulator, macOS, Windows und Linux, und die
+  Dart-Testsuite läuft in CI über `flutter test`.
+* Braucht eine Umgebung mit Flutter-SDK, Android-NDK und Xcode (CI-Runner).
+
+## Erledigt
+
+* ~~Android/Java: generisches JNI-Backend~~ → `runtime/java/JniAbi.java` +
+  `runtime/java/jni/acme_jni.c`; Android-Jar mit Java-17-Bytecode; in der
+  Kompatibilitätsmatrix gegen alle Cores getestet.
+
 ## Weitere Punkte
 
-* Android/Java: generisches `JniBackend` (C-Shim leitet die 17 ABI-Funktionen weiter).
 * Go-Emitter für den Core-seitigen Dispatch (`alt-cores/go/dispatch.go`).
-* Flutter-Plugin-Paketierung des Dart-SDKs über Dart „native assets“ (`hook/build.dart`).
 * `wss://` im Rust-Core (tokio-tungstenite mit `rustls-tls-webpki-roots`).
 * Optionaler `Unknown`-Case für Variants zur Vorwärtskompatibilität.

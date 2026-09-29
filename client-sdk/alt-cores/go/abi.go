@@ -225,9 +225,15 @@ func (s *stream) next() (uint64, int32) {
 		var item []byte
 		select {
 		case it, ok := <-s.items:
-			if ok {
+			switch {
+			case ok:
 				status, item = statusOK, it
-			} else {
+			case s.stopped():
+				// cancel() also closes `items`; select picks randomly among ready
+				// cases, so a pull pending at cancel time must still report
+				// CANCELLED, not END (ABI.md §8).
+				status = errCancelled
+			default:
 				status = statusStreamEnd
 			}
 		case <-s.stop:
@@ -244,6 +250,15 @@ func (s *stream) next() (uint64, int32) {
 		}
 	}()
 	return f.handle, statusOK
+}
+
+func (s *stream) stopped() bool {
+	select {
+	case <-s.stop:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *stream) cancel() {

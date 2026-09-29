@@ -28,11 +28,11 @@ Später zusätzlich: `client.wit → Canonical ABI → client.component.wasm`
 `tests/compatibility/run.sh` führt **dieselben, unveränderten** Test-Binaries
 (C#, Java) bzw. dieselbe Testsuite (Dart) gegen alle drei Cores aus:
 
-| Core | C ABI Conformance | C# SDK (13 Tests) | Java SDK (13 Tests) | Dart SDK (13 Tests) |
-|---|---|---|---|---|
-| Rust (`core-rust`, tokio) | ✅ ~2950 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
-| Go (`alt-cores/go`, cgo) | ✅ ~2980 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
-| Zig (`alt-cores/zig`, eager Stub) | ✅ basic-Profil | ✅ 7/7 basic | ✅ 7/7 basic | ✅ 7/7 basic |
+| Core | C ABI Conformance | C# SDK (13 Tests) | Java SDK Panama (13) | Java SDK JNI / Android-Pfad (13) | Dart SDK (13 Tests) |
+|---|---|---|---|---|---|
+| Rust (`core-rust`, tokio) | ✅ ~2950 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
+| Go (`alt-cores/go`, cgo) | ✅ ~2980 Checks | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 | ✅ 13/13 |
+| Zig (`alt-cores/zig`, eager Stub) | ✅ basic-Profil | ✅ 7/7 basic | ✅ 7/7 basic | ✅ 7/7 basic | ✅ 7/7 basic |
 
 Abgedeckt: Sync Call, Async Call, Async Error, Cancellation, Cancel/Completion-
 Race, Stream, Stream Cancellation, Object Lifetime, Double Drop, Concurrent
@@ -151,6 +151,24 @@ docs/FLUTTER.md           Dart-SDK in Flutter-Apps
 docs/ROADMAP.md           geplant: Generator-Emitter in Bun/TypeScript, JNI-Backend, …
 ```
 
+## Java: zwei Bindings, eine API
+
+Die generierten Klassen und die gesamte Async-Logik sehen nur `AbiCalls` (die
+17 ABI-Funktionen). Darunter liegen zwei austauschbare Bindings:
+
+| | Panama FFM | JNI |
+|---|---|---|
+| Wo | JDK 22+ (Desktop/Server) | **Android** (ART) und JDK 17+ |
+| Code | `PanamaAbi` + generiertes `NativeAbi` | `JniAbi` + generischer C-Shim `runtime/java/jni/acme_jni.c` (`libacme_jni`) |
+| Artefakt | `build/java/acme-client.jar` | `acme-client-android.jar` (Java-17-Bytecode, ohne Panama-Klassen) + `libacme_jni.so` je ABI (`runtime/java/jni/CMakeLists.txt`) |
+| Auswahl | automatisch; erzwingen mit `-Dacme.binding=panama\|jni` | |
+
+Der Shim ist vertragsneutral: Er lädt den Core per `dlopen` und leitet die 17
+Funktionen weiter. Neue WIT-Methoden und ein Wechsel der Core-Sprache
+erfordern kein Neubauen des Shims. Callbacks von Core-Threads hängt er einmalig
+als Daemon an die JVM und löst sie beim Thread-Ende wieder ab (Android bricht
+sonst ab).
+
 ## Kernentscheidungen (Details in [abi/ABI.md](abi/ABI.md))
 
 * **Buffer-Payloads statt typisierter FFI-Structs** (§5.1): `method_id + bytes`
@@ -268,10 +286,9 @@ gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
 ## Bekannte Grenzen des PoC
 
 * **Swift** ist nicht lokal kompiliert (siehe oben; CI auf macOS).
-* **Android + Java:** Android hat kein Panama FFM. Dafür braucht es ein
-  `JniBackend` (ebenfalls generisch: ein kleiner C-Shim leitet die 17
-  ABI-Funktionen weiter). Die generierten Klassen bleiben gleich, weil sie nur
-  `ClientBackend` sehen. Das Java-SDK unterstützt nur 64-Bit-Targets.
+* **Android + Java:** Das JNI-Binding ist implementiert und auf dem Desktop-JVM
+  gegen alle Cores getestet; auf einem echten Android-Gerät bzw. Emulator lief
+  es noch nicht (kein Android-SDK in dieser Umgebung).
 * **Go-Dispatch ist handgeschrieben:** Der Generator hat heute nur einen
   Rust-Core-Emitter; ein Go-Emitter würde `dispatch.go` erzeugen.
 * **WIT-Teilmenge:** `future<T>` als *Wert*, Ressourcen-Handles als Parameter,

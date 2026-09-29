@@ -23,6 +23,7 @@ pub fn emit(m: &Model) -> Vec<(String, String)> {
         files.push((format!("{DIR}/{}.java", class_name(m, r)), resource(m, r)));
     }
     files.push((format!("{DIR}/runtime/NativeAbi.java"), native_abi()));
+    files.push((format!("{DIR}/runtime/AbiConstants.java"), abi_constants()));
     files.push((format!("{DIR}/runtime/Contract.java"), contract(m)));
     files
 }
@@ -291,15 +292,20 @@ fn codec(m: &Model) -> String {
                 w!(o, "    }}");
             }
             TypeKind::Variant(cases) => {
+                // instanceof chain (Java 16) instead of a pattern switch (Java 21),
+                // so the generated code also compiles for Android (Java 17).
                 w!(o, "    static void write{name}(MsgPackWriter w, {name} v) {{");
-                w!(o, "        switch (v) {{");
-                for c in cases {
+                for (i, c) in cases.iter().enumerate() {
                     let cn = pascal(&c.name);
+                    let kw = if i == 0 { "if" } else { "} else if" };
+                    w!(o, "        {kw} (v instanceof {name}.{cn} c) {{");
                     match &c.ty {
-                        Some(t) => w!(o, "            case {name}.{cn} c -> {{ w.writeArrayHeader(2); w.writeUInt({}); {} }}", c.tag, enc(t, "c.value()", 1)),
-                        None => w!(o, "            case {name}.{cn} c -> {{ w.writeArrayHeader(1); w.writeUInt({}); }}", c.tag),
+                        Some(t) => w!(o, "            w.writeArrayHeader(2); w.writeUInt({}); {}", c.tag, enc(t, "c.value()", 1)),
+                        None => w!(o, "            w.writeArrayHeader(1); w.writeUInt({});", c.tag),
                     }
                 }
+                w!(o, "        }} else {{");
+                w!(o, "            throw new IllegalArgumentException(\"unknown {name} case: \" + v);");
                 w!(o, "        }}");
                 w!(o, "    }}");
                 w!(o, "");
@@ -478,6 +484,28 @@ fn request_ind(o: &mut String, params: &[(String, Ty)], ind: &str) {
     }
 }
 
+/// Plain constants (no java.lang.foreign), shared by the Panama and JNI backends.
+fn abi_constants() -> String {
+    let mut o = header(&format!("{PKG}.runtime"));
+    w!(o, "/** Status codes, capability bits and version of the Acme native ABI (abi/acme_client.h). */");
+    w!(o, "public final class AbiConstants {{");
+    w!(o, "    private AbiConstants() {{}}");
+    w!(o, "");
+    w!(o, "    public static final String LIBRARY = \"acme_client\";");
+    w!(o, "    public static final int ABI_MAJOR = {};", abi_table::ABI_MAJOR);
+    w!(o, "    public static final int ABI_MINOR = {};", abi_table::ABI_MINOR);
+    w!(o, "");
+    for (n, v) in abi_table::STATUSES {
+        w!(o, "    public static final int ACME_{n} = {v};");
+    }
+    w!(o, "");
+    for (n, bit) in abi_table::CAPABILITIES {
+        w!(o, "    public static final long ACME_CAP_{n} = 1L << {bit};");
+    }
+    w!(o, "}}");
+    o
+}
+
 fn layout(t: CTy) -> &'static str {
     match t {
         CTy::Void => unreachable!(),
@@ -506,21 +534,10 @@ fn native_abi() -> String {
     w!(o, "");
     w!(o, "/**");
     w!(o, " * Panama FFM bindings of the generic Acme native ABI {}.{} (abi/acme_client.h).", abi_table::ABI_MAJOR, abi_table::ABI_MINOR);
+    w!(o, " * Java 22+ only; Android and older JVMs use the JNI backend instead.");
     w!(o, " * This list does not grow when WIT functions are added: those are addressed by method id.");
     w!(o, " */");
     w!(o, "public final class NativeAbi {{");
-    w!(o, "    public static final String LIBRARY = \"acme_client\";");
-    w!(o, "    public static final int ABI_MAJOR = {};", abi_table::ABI_MAJOR);
-    w!(o, "    public static final int ABI_MINOR = {};", abi_table::ABI_MINOR);
-    w!(o, "");
-    for (n, v) in abi_table::STATUSES {
-        w!(o, "    public static final int ACME_{n} = {v};");
-    }
-    w!(o, "");
-    for (n, bit) in abi_table::CAPABILITIES {
-        w!(o, "    public static final long ACME_CAP_{n} = 1L << {bit};");
-    }
-    w!(o, "");
     w!(o, "    /** struct acme_bytes / acme_buffer {{ uint8_t* ptr; size_t len; }} (64-bit targets). */");
     w!(o, "    public static final StructLayout ACME_BYTES = MemoryLayout.structLayout(ADDRESS.withName(\"ptr\"), JAVA_LONG.withName(\"len\"));");
     w!(o, "    public static final StructLayout ACME_BUFFER = MemoryLayout.structLayout(ADDRESS.withName(\"ptr\"), JAVA_LONG.withName(\"len\"));");

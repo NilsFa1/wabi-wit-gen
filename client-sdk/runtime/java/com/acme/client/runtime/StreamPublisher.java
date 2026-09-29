@@ -69,12 +69,12 @@ final class StreamPublisher<T> implements Flow.Publisher<T> {
         public void cancel() {
             if (done) return;
             done = true;
-            backend.abi().acme_stream_cancel(stream); // a pending pull completes as cancelled
+            backend.abi().streamCancel(stream); // a pending pull completes as cancelled
             if (!pulling.get()) release();
         }
 
         private void release() {
-            if (released.compareAndSet(false, true)) backend.abi().acme_stream_drop(stream);
+            if (released.compareAndSet(false, true)) backend.abi().streamDrop(stream);
         }
 
         /** Starts one pull if there is demand and none in flight (trampolined via the executor). */
@@ -92,15 +92,15 @@ final class StreamPublisher<T> implements Flow.Publisher<T> {
                 return;
             }
             backend.whenReady(future).whenComplete((ignored, failure) -> {
-                NativeBackend.Taken taken = null;
+                AbiCalls.Taken taken = null;
                 try {
-                    if (failure == null) taken = backend.take(future);
+                    if (failure == null) taken = backend.abi().take(future);
                 } finally {
-                    backend.abi().acme_future_drop(future);
+                    backend.abi().futureDrop(future);
                 }
                 if (failure != null) {
                     finish(failure);
-                } else if (taken.status() == NativeAbi.ACME_OK) {
+                } else if (taken.status() == AbiConstants.ACME_OK) {
                     if (done) {
                         pulling.set(false);
                         release();
@@ -118,7 +118,7 @@ final class StreamPublisher<T> implements Flow.Publisher<T> {
                     pulling.set(false);
                     if (done) release();
                     else schedule();
-                } else if (taken.status() == NativeAbi.ACME_STREAM_END || taken.status() == NativeAbi.ACME_ERR_CANCELLED) {
+                } else if (taken.status() == AbiConstants.ACME_STREAM_END || taken.status() == AbiConstants.ACME_ERR_CANCELLED) {
                     finish(null); // end of stream, or cancelled (by us or because the object was closed)
                 } else {
                     finish(backend.error(taken.status(), taken.bytes()));

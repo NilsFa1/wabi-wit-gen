@@ -52,7 +52,12 @@ static int failures = 0, checks = 0;
             fprintf(stderr, "\n");                                               \
         }                                                                        \
     } while (0)
-#define EQ(a, b) CHECK((a) == (b), "%lld != %lld", (long long)(a), (long long)(b))
+/* Evaluates each operand exactly once (operands are often ABI calls). */
+#define EQ(a, b)                                                     \
+    do {                                                             \
+        long long eq_a_ = (long long)(a), eq_b_ = (long long)(b);    \
+        CHECK(eq_a_ == eq_b_, "%lld != %lld", eq_a_, eq_b_);         \
+    } while (0)
 
 /* Method ids come from wit/abi-ids.lock (an SDK gets them generated). */
 enum {

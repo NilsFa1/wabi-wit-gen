@@ -188,7 +188,7 @@ public final class AcmeClientTests {
             backend.callSync(handle, 0x0101, new byte[] {(byte) 0x90});
             throw new AssertionError("expected AcmeNativeException");
         } catch (AcmeNativeException e) {
-            check(e.status() == NativeAbi.ACME_ERR_INVALID_HANDLE, "invalid handle after drop");
+            check(e.status() == AbiConstants.ACME_ERR_INVALID_HANDLE, "invalid handle after drop");
         }
         backend.dropObject(handle); // second drop: detected by the core, harmless
     }
