@@ -52,9 +52,9 @@ public final class ZeroHost {
         switch (methodId) {
             case MethodIds.HOST_KEYS_PUBLIC_KEY: {
                 if (r.readArrayHeader() != 1) throw new AcmeProtocolException("public-key: wrong parameter count");
-                String keyId = r.readString();
+                String keyId_ = r.readString();
                 if (r.remaining() != 0) throw new AcmeProtocolException("trailing bytes in host call request");
-                return call(() -> hostKeys.publicKey(keyId)).handle((ret, failure) -> {
+                return call(() -> hostKeys.publicKey(keyId_)).handle((ret, failure) -> {
                     var w = new MsgPackWriter();
                     if (failure == null) {
                         w.writeArrayHeader(2);
@@ -72,10 +72,10 @@ public final class ZeroHost {
             }
             case MethodIds.HOST_KEYS_SIGN: {
                 if (r.readArrayHeader() != 2) throw new AcmeProtocolException("sign: wrong parameter count");
-                String keyId = r.readString();
-                byte[] digest = r.readBinary();
+                String keyId_ = r.readString();
+                byte[] digest_ = r.readBinary();
                 if (r.remaining() != 0) throw new AcmeProtocolException("trailing bytes in host call request");
-                return call(() -> hostKeys.sign(keyId, digest)).handle((ret, failure) -> {
+                return call(() -> hostKeys.sign(keyId_, digest_)).handle((ret, failure) -> {
                     var w = new MsgPackWriter();
                     if (failure == null) {
                         w.writeArrayHeader(2);

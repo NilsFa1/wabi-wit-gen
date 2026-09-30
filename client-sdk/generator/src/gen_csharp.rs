@@ -629,10 +629,10 @@ fn host(m: &Model) -> String {
             w!(o, "            {{");
             w!(o, "                r.ReadArrayHeader({});", f.params.len());
             for (n, t) in &f.params {
-                w!(o, "                var {} = {};", ident(n), dec(t, "r", 1));
+                w!(o, "                var {} = {};", host_local(n), dec(t, "r", 1));
             }
             w!(o, "                if (r.Remaining != 0) throw new AcmeProtocolException(\"trailing bytes in host call request\");");
-            let call = format!("await {target}.{}Async({}).ConfigureAwait(false)", pascal(&f.name), f.params.iter().map(|(n, _)| ident(n)).collect::<Vec<_>>().join(", "));
+            let call = format!("await {target}.{}Async({}).ConfigureAwait(false)", pascal(&f.name), f.params.iter().map(|(n, _)| host_local(n)).collect::<Vec<_>>().join(", "));
             match &f.ret {
                 Ret::Unit => {
                     w!(o, "                {call};");

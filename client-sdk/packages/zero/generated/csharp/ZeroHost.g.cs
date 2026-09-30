@@ -49,11 +49,11 @@ public static class ZeroHost
             case MethodIds.HostKeysPublicKey:
             {
                 r.ReadArrayHeader(1);
-                var keyId = r.ReadString();
+                var keyId_ = r.ReadString();
                 if (r.Remaining != 0) throw new AcmeProtocolException("trailing bytes in host call request");
                 try
                 {
-                    var ret = await hostKeys.PublicKeyAsync(keyId).ConfigureAwait(false);
+                    var ret = await hostKeys.PublicKeyAsync(keyId_).ConfigureAwait(false);
                     w.WriteArrayHeader(2); w.WriteUInt(0); w.WriteBinary(ret);
                 }
                 catch (ZeroException e)
@@ -66,12 +66,12 @@ public static class ZeroHost
             case MethodIds.HostKeysSign:
             {
                 r.ReadArrayHeader(2);
-                var keyId = r.ReadString();
-                var digest = r.ReadBinary();
+                var keyId_ = r.ReadString();
+                var digest_ = r.ReadBinary();
                 if (r.Remaining != 0) throw new AcmeProtocolException("trailing bytes in host call request");
                 try
                 {
-                    var ret = await hostKeys.SignAsync(keyId, digest).ConfigureAwait(false);
+                    var ret = await hostKeys.SignAsync(keyId_, digest_).ConfigureAwait(false);
                     w.WriteArrayHeader(2); w.WriteUInt(0); w.WriteBinary(ret);
                 }
                 catch (ZeroException e)

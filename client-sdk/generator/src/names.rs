@@ -37,6 +37,15 @@ pub fn screaming(s: &str) -> String {
     snake(s).to_ascii_uppercase()
 }
 
+/// Local variable for a decoded host-call parameter in the generated host
+/// dispatchers (C#, Java, Swift): `request` -> `request_`. The trailing
+/// underscore cannot come from a WIT identifier, so the local never shadows the
+/// dispatcher's own variables (`request`, `r`, `w`, `ret`, `failure`, ...) and
+/// is never a keyword.
+pub fn host_local(s: &str) -> String {
+    format!("{}_", camel(s))
+}
+
 /// Name of the exception/error wrapper generated for a WIT type used as the
 /// error arm of a `result`: `client-error` -> `ClientException`.
 pub fn exception_name(type_name: &str) -> String {
@@ -54,6 +63,8 @@ mod tests {
         assert_eq!(camel("get-customer"), "getCustomer");
         assert_eq!(snake("get-customer"), "get_customer");
         assert_eq!(screaming("get-customer"), "GET_CUSTOMER");
+        assert_eq!(host_local("request"), "request_");
+        assert_eq!(host_local("key-id"), "keyId_");
         assert_eq!(exception_name("client-error"), "ClientException");
         assert_eq!(exception_name("oops"), "OopsException");
     }

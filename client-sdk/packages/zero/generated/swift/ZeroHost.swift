@@ -32,10 +32,10 @@ public enum ZeroHost {
         switch methodId {
         case MethodIds.hostKeysPublicKey:
             try r.readTupleHeader(1)
-            let keyId = try r.readString()
+            let keyId_ = try r.readString()
             guard r.remaining == 0 else { throw AcmeRuntimeError.protocolError("trailing bytes in host call request") }
             do {
-                let ret = try await hostKeys.publicKey(keyId: keyId)
+                let ret = try await hostKeys.publicKey(keyId: keyId_)
                 w.writeArrayHeader(2); w.writeUInt(0)
                 w.writeBinary(ret)
             } catch let e as ZeroError {
@@ -45,11 +45,11 @@ public enum ZeroHost {
             }
         case MethodIds.hostKeysSign:
             try r.readTupleHeader(2)
-            let keyId = try r.readString()
-            let digest = try r.readBinary()
+            let keyId_ = try r.readString()
+            let digest_ = try r.readBinary()
             guard r.remaining == 0 else { throw AcmeRuntimeError.protocolError("trailing bytes in host call request") }
             do {
-                let ret = try await hostKeys.sign(keyId: keyId, digest: digest)
+                let ret = try await hostKeys.sign(keyId: keyId_, digest: digest_)
                 w.writeArrayHeader(2); w.writeUInt(0)
                 w.writeBinary(ret)
             } catch let e as ZeroError {

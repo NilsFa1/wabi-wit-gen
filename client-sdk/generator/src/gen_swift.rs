@@ -421,10 +421,10 @@ fn host(m: &Model) -> String {
             w!(o, "        case MethodIds.{}{}:", camel(&h.name), pascal(&f.name));
             w!(o, "            try r.readTupleHeader({})", f.params.len());
             for (n, t) in &f.params {
-                w!(o, "            let {} = {}", ident(n), dec(t, "r", 1));
+                w!(o, "            let {} = {}", host_local(n), dec(t, "r", 1));
             }
             w!(o, "            guard r.remaining == 0 else {{ throw AcmeRuntimeError.protocolError(\"trailing bytes in host call request\") }}");
-            let a: Vec<String> = f.params.iter().map(|(n, _)| format!("{}: {}", ident(n), ident(n))).collect();
+            let a: Vec<String> = f.params.iter().map(|(n, _)| format!("{}: {}", ident(n), host_local(n))).collect();
             let call = format!("try await {target}.{}({})", ident(&f.name), a.join(", "));
             match &f.ret {
                 Ret::Unit => {

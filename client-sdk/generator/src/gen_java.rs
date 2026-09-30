@@ -726,10 +726,10 @@ fn host(m: &Model) -> String {
             w!(o, "            case MethodIds.{}_{}: {{", screaming(&h.name), screaming(&f.name));
             w!(o, "                if (r.readArrayHeader() != {}) throw new AcmeProtocolException(\"{}: wrong parameter count\");", f.params.len(), f.name);
             for (n, t) in &f.params {
-                w!(o, "                {} {} = {};", jt(t), ident(n), dec(t, "r", 1));
+                w!(o, "                {} {} = {};", jt(t), host_local(n), dec(t, "r", 1));
             }
             w!(o, "                if (r.remaining() != 0) throw new AcmeProtocolException(\"trailing bytes in host call request\");");
-            let a: Vec<String> = f.params.iter().map(|(n, _)| ident(n)).collect();
+            let a: Vec<String> = f.params.iter().map(|(n, _)| host_local(n)).collect();
             w!(o, "                return call(() -> {target}.{}({})).handle((ret, failure) -> {{", ident(&f.name), a.join(", "));
             w!(o, "                    var w = new MsgPackWriter();");
             match &f.ret {
