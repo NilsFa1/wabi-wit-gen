@@ -98,7 +98,9 @@ für Parsing (inkl. Brainpool), TSL, Admission und OCSP, darüber die Prüfschri
 von TUC_PKI_018 nach gemLibPki 5.0.2 (gleiche Reihenfolge, Fehlercodes, Texte),
 nur ECC. Eine Bibliothek von ~8–10 MB, per `build.sh` für Linux, Windows, macOS,
 Android (`jniLibs`) und iOS (`.xcframework`) gebaut (`.github/workflows/pki-go.yml`).
-Beide Cores laufen gegen dieselben, unveränderten SDK-Tests.
+Beide Cores laufen gegen dieselben, unveränderten SDK-Tests. Wie daraus Pakete
+(NuGet, Maven/AAR, SwiftPM, pub.dev) und ein eigenes SDK-Repo werden:
+[docs/PACKAGING.md](docs/PACKAGING.md).
 
 | App-Sprache | Java-Core (GraalVM native-image) | Go-Core (gempki) |
 |---|---|---|
@@ -220,6 +222,7 @@ docs/COMPONENT_MODEL.md   Weg zu client.component.wasm
 docs/FLUTTER.md           Dart-SDK in Flutter-Apps
 docs/CORE_LANGUAGES.md    Bewertung: C# (NativeAOT, nachgewiesen) und Kotlin/Native als Core-Sprache
 docs/ROADMAP.md           geplant: Generator-Emitter in Bun/TypeScript, JNI-Backend, …
+docs/PACKAGING.md         Plan: gematik:pki als eigenes SDK-Repo mit NuGet/Maven/AAR/SwiftPM/pub-Paketen
 ```
 
 ## Java: zwei Bindings, eine API

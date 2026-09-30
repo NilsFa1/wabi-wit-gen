@@ -49,6 +49,9 @@ Es gibt keine manuellen Schritte für jniLibs, xcframework, DLL oder dylib mehr
   (arm64 + x86_64-Emulator), iOS-Simulator, macOS, Windows und Linux, und die
   Dart-Testsuite läuft in CI über `flutter test`.
 * Braucht eine Umgebung mit Flutter-SDK, Android-NDK und Xcode (CI-Runner).
+* Gilt genauso für `gematik:pki`; der Hook sollte vom Generator für jedes
+  WIT-Paket erzeugt werden. Gesamtplan für Pakete und SDK-Repo:
+  [`docs/PACKAGING.md`](PACKAGING.md).
 
 ## Offen: Host-Calls (ABI 1.1) im Zig-Core
 
