@@ -12,12 +12,13 @@ use crate::runtime;
 use std::ffi::c_void;
 use std::sync::Mutex;
 use tokio::task::AbortHandle;
+use tokio_util::sync::CancellationToken;
 
 pub enum Outcome {
     Value(Vec<u8>),
     End,
     Cancelled,
-    Failed(acme_status, String),
+    Failed(wabi_status, String),
 }
 
 enum State {
@@ -28,7 +29,7 @@ enum State {
 
 #[derive(Clone, Copy)]
 struct Callback {
-    f: acme_future_callback,
+    f: wabi_future_callback,
     user_data: *mut c_void,
 }
 // The host promises that user_data may be used from any thread (ABI.md §6).
@@ -47,6 +48,8 @@ struct Inner {
     subscribed: bool,
     callback: Option<Callback>,
     abort: Option<AbortHandle>,
+    pull_cancel: Option<CancellationToken>,
+    cancel_requested: bool,
 }
 
 pub struct FutureSlot {
@@ -58,7 +61,7 @@ impl FutureSlot {
     pub fn new(handle: u64) -> Self {
         FutureSlot {
             handle,
-            inner: Mutex::new(Inner { state: State::Pending, subscribed: false, callback: None, abort: None }),
+            inner: Mutex::new(Inner { state: State::Pending, subscribed: false, callback: None, abort: None, pull_cancel: None, cancel_requested: false }),
         }
     }
 
@@ -66,16 +69,37 @@ impl FutureSlot {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Called by the core when the operation finished. Must run on a core
-    /// thread: the callback is invoked inline, after the lock is released.
+    /// Pull cancellation is finalized by the worker after restoring any item.
+    /// It must not abort that worker or expose READY before stream cleanup.
+    pub(crate) fn new_pull(handle: u64, cancel: CancellationToken) -> Self {
+        let slot = Self::new(handle);
+        slot.lock().pull_cancel = Some(cancel);
+        slot
+    }
+
+    /// Called on a core thread. No host callback runs while a lock is held.
     pub fn complete(&self, outcome: Outcome) {
+        self.complete_with(outcome, |_| {});
+    }
+
+    /// Return rejected outcomes to the producer and clean up before readiness
+    /// is observable. The closure must not access this future or call host code.
+    pub(crate) fn complete_with(&self, outcome: Outcome, before_publish: impl FnOnce(Option<Outcome>)) {
         let cb = {
             let mut g = self.lock();
             if !matches!(g.state, State::Pending) {
-                return; // cancelled first: completion is discarded
+                before_publish(Some(outcome));
+                return;
             }
-            g.state = State::Ready(outcome);
+            let rejected = if g.cancel_requested {
+                g.state = State::Ready(Outcome::Cancelled);
+                Some(outcome)
+            } else {
+                g.state = State::Ready(outcome);
+                None
+            };
             g.abort = None;
+            before_publish(rejected);
             g.callback.take()
         };
         if let Some(cb) = cb {
@@ -83,7 +107,7 @@ impl FutureSlot {
         }
     }
 
-    /// Host-initiated cancellation (acme_future_cancel / _drop). The callback
+    /// Host-initiated cancellation (wabi_future_cancel / _drop). The callback
     /// is never invoked on the calling (host) thread; it is scheduled on the
     /// core runtime instead.
     pub fn cancel(&self) {
@@ -91,6 +115,11 @@ impl FutureSlot {
             let mut g = self.lock();
             if !matches!(g.state, State::Pending) {
                 return; // completion won the race
+            }
+            if let Some(token) = g.pull_cancel.clone() {
+                g.cancel_requested = true;
+                token.cancel();
+                return; // worker restores stream state, then publishes cancellation
             }
             g.state = State::Ready(Outcome::Cancelled);
             (g.callback.take(), g.abort.take())
@@ -115,39 +144,39 @@ impl FutureSlot {
         }
     }
 
-    pub fn subscribe(&self, f: acme_future_callback, user_data: *mut c_void) -> acme_status {
+    pub fn subscribe(&self, f: wabi_future_callback, user_data: *mut c_void) -> wabi_status {
         let mut g = self.lock();
         if g.subscribed {
-            return ACME_ERR_BUSY;
+            return WABI_ERR_BUSY;
         }
         g.subscribed = true;
         match g.state {
             State::Pending => {
                 g.callback = Some(Callback { f, user_data });
-                ACME_OK
+                WABI_OK
             }
-            _ => ACME_READY,
+            _ => WABI_READY,
         }
     }
 
-    pub fn poll(&self) -> acme_status {
+    pub fn poll(&self) -> wabi_status {
         match self.lock().state {
-            State::Pending => ACME_PENDING,
-            _ => ACME_READY,
+            State::Pending => WABI_PENDING,
+            _ => WABI_READY,
         }
     }
 
-    pub fn take(&self) -> (acme_status, Vec<u8>) {
+    pub fn take(&self) -> (wabi_status, Vec<u8>) {
         let mut g = self.lock();
         match std::mem::replace(&mut g.state, State::Taken) {
             State::Pending => {
                 g.state = State::Pending;
-                (ACME_PENDING, vec![])
+                (WABI_PENDING, vec![])
             }
-            State::Taken => (ACME_ERR_ALREADY_TAKEN, b"result already taken".to_vec()),
-            State::Ready(Outcome::Value(v)) => (ACME_OK, v),
-            State::Ready(Outcome::End) => (ACME_STREAM_END, vec![]),
-            State::Ready(Outcome::Cancelled) => (ACME_ERR_CANCELLED, vec![]),
+            State::Taken => (WABI_ERR_ALREADY_TAKEN, b"result already taken".to_vec()),
+            State::Ready(Outcome::Value(v)) => (WABI_OK, v),
+            State::Ready(Outcome::End) => (WABI_STREAM_END, vec![]),
+            State::Ready(Outcome::Cancelled) => (WABI_ERR_CANCELLED, vec![]),
             State::Ready(Outcome::Failed(s, msg)) => (s, msg.into_bytes()),
         }
     }

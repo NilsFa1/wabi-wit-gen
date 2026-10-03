@@ -1,9 +1,9 @@
 package main
 
 // The Go core's business logic: plain Go against the GENERATED contract
-// types (acme_generated.go, from wit/client.wit). Everything ABI-related —
+// types (wabi_generated.go, from wit/client.wit). Everything ABI-related —
 // handles, futures, streams, codec, the exported C symbols — lives in the
-// generated file and the runtime module acme.example/acmeabi (runtime/go).
+// generated file and the runtime module wabi.example/wabiabi (runtime/go).
 // It implements the same observable contract as the Rust core against an
 // in-process backend (mem:// endpoints), which the cross-language tests use.
 
@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	acmeabi "acme.example/acmeabi"
+	wabiabi "wabi.example/wabiabi"
 )
 
-const coreInfo = "acme-go-core/0.2.0 (goroutines, generated glue)"
+const coreInfo = "wabi-go-core/0.2.0 (goroutines, generated glue)"
 
 var (
 	errNotFound     = &ClientError{Tag: ClientErrorNotFound}
@@ -211,9 +211,9 @@ func (c *client) run(ctx context.Context, name string, payload []byte) ([]byte, 
 }
 
 // Events opens an independent subscription; cancelling the stream unsubscribes.
-func (c *client) Events() acmeabi.Stream[ClientEvent] {
+func (c *client) Events() wabiabi.Stream[ClientEvent] {
 	ch, unsubscribe := c.subscribe()
-	return acmeabi.Stream[ClientEvent]{C: ch, Cancel: unsubscribe}
+	return wabiabi.Stream[ClientEvent]{C: ch, Cancel: unsubscribe}
 }
 
 func (c *client) subscribe() (<-chan ClientEvent, func()) {

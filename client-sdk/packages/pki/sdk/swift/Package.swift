@@ -1,5 +1,5 @@
 // swift-tools-version:5.9
-// gematik:pki PoC Swift SDK = shared runtime (Sources/GematikPki/Runtime -> runtime/swift)
+// gematik:pki PoC Swift SDK = runtime written by wabi-wit-gen (Sources/GematikPki/Generated/Runtime)
 //                           + generated code (Sources/GematikPki/Generated -> packages/pki/generated/swift)
 // linked against a gematik:pki core (libgematik_pki: core-go or core-java).
 //
@@ -13,8 +13,8 @@ let package = Package(
         .library(name: "GematikPki", targets: ["GematikPki"]),
     ],
     targets: [
-        .systemLibrary(name: "CAcmeClient", path: "Sources/CAcmeClient"),
-        .target(name: "GematikPki", dependencies: ["CAcmeClient"], path: "Sources/GematikPki"),
+        .systemLibrary(name: "CGematikPki", path: "Sources/CGematikPki"),
+        .target(name: "GematikPki", dependencies: ["CGematikPki"], path: "Sources/GematikPki"),
         .testTarget(name: "GematikPkiTests", dependencies: ["GematikPki"], path: "Tests/GematikPkiTests"),
     ]
 )

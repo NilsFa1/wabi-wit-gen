@@ -1,12 +1,13 @@
 // The C# core's business logic: plain async C#, no interop. Same observable
 // behaviour as the Rust/Go cores against the in-process backend (mem://).
-// It uses the *generated* contract types (Customer, ClientError, ...) directly.
+// It implements the generated IClient and uses the generated contract types
+// (Customer, ClientError, ...) directly; domain errors are thrown as ClientException.
 using System.Threading.Channels;
-using Acme.Client;
+using Wabi.Client;
 
-namespace Acme.Core;
+namespace Wabi.Core;
 
-sealed class Client : ICoreObject
+sealed class Client : IClient
 {
     private readonly ClientOptions _options;
     private readonly object _gate = new();
@@ -23,10 +24,12 @@ sealed class Client : ICoreObject
 
     public Client(ClientOptions options) => _options = options;
 
-    public ConnectionState State
+    public ConnectionState State()
     {
-        get { lock (_gate) return _state; }
+        lock (_gate) return _state;
     }
+
+    private static ClientException Fail(ClientError e) => new(e);
 
     // Caller holds _gate. Slow subscribers lose events instead of blocking the core.
     private void Publish(ClientEvent e)
@@ -53,12 +56,12 @@ sealed class Client : ICoreObject
         lock (_gate) return _connection is { IsCancellationRequested: false } c ? c.Token : null;
     }
 
-    public ClientError? Connect()
+    public Task ConnectAsync(CancellationToken cancellationToken)
     {
         lock (_gate)
         {
-            if (_closed) return new ClientError.Disconnected();
-            if (_connection is { IsCancellationRequested: false }) return null;
+            if (_closed) throw Fail(new ClientError.Disconnected());
+            if (_connection is { IsCancellationRequested: false }) return Task.CompletedTask;
             SetState(ConnectionState.Connecting);
             ClientError? error = _options.Endpoint switch
             {
@@ -71,49 +74,52 @@ sealed class Client : ICoreObject
             if (error is not null)
             {
                 SetState(ConnectionState.Disconnected);
-                return error;
+                throw Fail(error);
             }
             _connection = new CancellationTokenSource();
             SetState(ConnectionState.Connected);
-            return null;
+            return Task.CompletedTask;
         }
     }
 
-    public void Disconnect()
+    public Task DisconnectAsync(CancellationToken cancellationToken)
     {
         lock (_gate) DropConnection();
+        return Task.CompletedTask;
     }
 
-    public (Customer?, ClientError?) GetCustomer(string id)
+    public Task<Customer> GetCustomerAsync(string id, CancellationToken cancellationToken)
     {
-        if (Live() is null) return (null, new ClientError.Disconnected());
-        lock (_gate) return _customers.TryGetValue(id, out var c) ? (c, null) : (null, new ClientError.NotFound());
+        if (Live() is null) throw Fail(new ClientError.Disconnected());
+        lock (_gate) return _customers.TryGetValue(id, out var c) ? Task.FromResult(c) : throw Fail(new ClientError.NotFound());
     }
 
-    public (Customer?, ClientError?) CreateCustomer(string name, string? email)
+    public Task<Customer> CreateCustomerAsync(string name, string? email, CancellationToken cancellationToken)
     {
-        if (Live() is null) return (null, new ClientError.Disconnected());
-        if (string.IsNullOrWhiteSpace(name)) return (null, new ClientError.ProtocolError("name must not be empty"));
+        if (Live() is null) throw Fail(new ClientError.Disconnected());
+        if (string.IsNullOrWhiteSpace(name)) throw Fail(new ClientError.ProtocolError("name must not be empty"));
         lock (_gate)
         {
             var c = new Customer((++_nextId).ToString(), name, email);
             _customers[c.Id] = c;
             Publish(new ClientEvent.CustomerUpdated(c));
-            return (c, null);
+            return Task.FromResult(c);
         }
     }
 
-    /// <param name="cancelled">host cancellation (acme_future_cancel)</param>
-    public async Task<(byte[]?, ClientError?)> SendCommandAsync(string name, byte[] payload, CancellationToken cancelled)
+    /// <param name="cancellationToken">host cancellation (wabi_future_cancel)</param>
+    public async Task<CommandResult> SendCommandAsync(Command command, CancellationToken cancellationToken)
     {
-        if (Live() is not { } connection) return (null, new ClientError.Disconnected());
+        var (name, payload, cancelled) = (command.Name, command.Payload, cancellationToken);
+        CommandResult Ok(byte[] p) => new(name, p);
+        if (Live() is not { } connection) throw Fail(new ClientError.Disconnected());
         switch (name)
         {
             case "echo":
-                return (payload, null);
+                return Ok(payload);
             case "broadcast":
                 lock (_gate) Publish(new ClientEvent.MessageReceived(System.Text.Encoding.UTF8.GetString(payload)));
-                return (Array.Empty<byte>(), null);
+                return Ok(Array.Empty<byte>());
             case "sleep":
                 int.TryParse(System.Text.Encoding.UTF8.GetString(payload), out var ms);
                 using (var timeout = new CancellationTokenSource())
@@ -123,28 +129,28 @@ sealed class Client : ICoreObject
                     try
                     {
                         await Task.Delay(ms, any.Token).ConfigureAwait(false);
-                        return (payload, null);
+                        return Ok(payload);
                     }
                     catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancelled.IsCancellationRequested)
                     {
-                        return (null, new ClientError.NetworkError("request timed out"));
+                        throw Fail(new ClientError.NetworkError("request timed out"));
                     }
                     catch (OperationCanceledException)
                     {
-                        return (null, new ClientError.Disconnected()); // discarded if the host cancelled
+                        throw Fail(new ClientError.Disconnected()); // discarded if the host cancelled
                     }
                 }
             case "fail":
-                return (null, new ClientError.ProtocolError("command failed on purpose"));
+                throw Fail(new ClientError.ProtocolError("command failed on purpose"));
             case "hang-up":
                 lock (_gate) DropConnection();
-                return (null, new ClientError.Disconnected());
+                throw Fail(new ClientError.Disconnected());
             default:
-                return (null, new ClientError.ProtocolError($"unknown command `{name}`"));
+                throw Fail(new ClientError.ProtocolError($"unknown command `{name}`"));
         }
     }
 
-    public (ChannelReader<ClientEvent> Reader, Action Unsubscribe) Subscribe()
+    public CoreStream<ClientEvent> Events()
     {
         var ch = Channel.CreateBounded<ClientEvent>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
         lock (_gate)
@@ -152,11 +158,11 @@ sealed class Client : ICoreObject
             if (_closed)
             {
                 ch.Writer.Complete();
-                return (ch.Reader, () => { });
+                return new CoreStream<ClientEvent>(ch.Reader);
             }
             var id = _nextSubscriber++;
             _subscribers[id] = ch;
-            return (ch.Reader, () =>
+            return new CoreStream<ClientEvent>(ch.Reader, () =>
             {
                 lock (_gate)
                     if (_subscribers.Remove(id)) ch.Writer.TryComplete();

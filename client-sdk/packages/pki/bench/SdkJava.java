@@ -1,6 +1,6 @@
 // Variants 2/3: a Java application using the generated SDK against the native
 // library (gemLibPki compiled with GraalVM native-image), via Panama or JNI.
-import com.acme.client.runtime.NativeBackend;
+import com.gematik.pki.runtime.NativeBackend;
 import com.gematik.pki.CertificateProfile;
 import com.gematik.pki.CertificateVerifier;
 import java.nio.file.Files;

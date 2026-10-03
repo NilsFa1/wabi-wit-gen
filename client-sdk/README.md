@@ -1,11 +1,11 @@
-# Acme Client SDK — WIT-first, sprachübergreifend, Core austauschbar
+# Wabi Client SDK — WIT-first, sprachübergreifend, Core austauschbar
 
 Proof of Concept für ein Client-SDK, dessen **öffentlicher Vertrag WIT** ist
 und dessen **Implementierungssprache austauschbar** bleibt.
 
 ```
                         wit/client.wit                 ← öffentlicher Vertrag
-                              │  acme-wit-gen
+                              │  wabi-wit-gen
       ┌─────────────────┬───────┴─────────┬─────────────────┐
       ▼                 ▼                 ▼                 ▼
    C# SDK            Java SDK          Swift SDK        Dart SDK      ← generiert + generische Runtime
@@ -13,7 +13,7 @@ und dessen **Implementierungssprache austauschbar** bleibt.
  IAsyncEnumerable  Flow.Publisher     AsyncSequence    Stream
       └─────────────────┴───────┬─────────┴─────────────────┘
                               ▼
-                 abi/acme_abi.h  (17 Funktionen)          ← stabiles Implementierungsprotokoll
+                 abi/wabi_abi.h  (17 Funktionen)          ← stabiles Implementierungsprotokoll
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼
       Rust Core        Go Core        Zig Core       C# Core      ← austauschbar
@@ -55,8 +55,8 @@ Der Core erzeugt DPoP-Proofs (RFC 9449), der private Schlüssel bleibt aber
 importierte WIT-Interface `host-keys` auf (ABI.md §4a). Es gibt **drei
 austauschbare Cores** mit denselben Symbolen (`libgematik_zero`):
 
-* **Go** mit gematik libzero (`core-go/dpop.go` + generiertes `acme_generated.go`),
-* **Rust** (`core-rust/src/lib.rs` + generiertes `generated.rs`, Runtime-Crate `acme-abi-rt`),
+* **Go** mit gematik libzero (`core-go/dpop.go` + generiertes `wabi_generated.go`),
+* **Rust** (`core-rust/src/lib.rs` + generiertes `generated.rs`, Runtime-Crate `wabi-abi-rt`),
 * **C#** NativeAOT (`core-csharp`, Runtime `runtime/csharp-core`).
 
 `packages/zero/run-tests.sh` lässt jede App-Sprache gegen jeden Core laufen;
@@ -70,6 +70,7 @@ Signatur und Thumbprint unabhängig:
 | Java Panama (JDK `Signature`) | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
 | Java JNI, Android-Pfad | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
 | Dart/Flutter (pointycastle) | ✅ 6/6 | ✅ 6/6 | ✅ 6/6 |
+| TypeScript/Bun (`@noble/curves`) | ✅ 12/12 | ✅ 12/12 | ✅ 12/12 |
 | Swift (Security-Framework `SecKey`) | ⏳ nur macOS-CI | ⏳ | ⏳ |
 
 Zig kann noch keine Host-Calls auslösen (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
@@ -87,7 +88,7 @@ kleinen Wrapper um gematik [ref-GemLibPki](https://github.com/gematik/ref-GemLib
 mit einer Methode, der Zertifikatsprüfung nach TUC_PKI_018 gegen die CAs einer
 TSL. GraalVM `native-image` kompiliert Wrapper, gemLibPki, BouncyCastle und
 JAXB zu einer nativen Bibliothek; C#-, Java-, Dart- und Swift-Apps brauchen
-**keine JVM**. Generiert werden Dispatcher und Schnittstellen (`acme-wit-gen`
+**keine JVM**. Generiert werden Dispatcher und Schnittstellen (`wabi-wit-gen`
 Target `java-core`); die generische Runtime liegt in `runtime/java-core`
 (inkl. C-Shim für die GraalVM-Isolate), Details in
 [packages/pki/core-java/README.md](packages/pki/core-java/README.md).
@@ -115,6 +116,29 @@ Runtime, Tests, Beispiel), konnte in dieser Linux-Umgebung aber **nicht
 kompiliert** werden (keine Swift-Toolchain verfügbar). Der CI-Workflow
 `.github/workflows/client-sdk.yml` baut und testet es auf macOS.
 
+## Generator per npm (eigene Projekte)
+
+Für eigene Verträge braucht es dieses Repository nicht: `wabi-wit-gen` gibt es
+als npm-Paket `@nfails/wabi-wit-gen` (der Generator als WebAssembly, läuft mit Node ≥ 20 und Bun auf
+jeder Plattform).
+
+```bash
+npx @nfails/wabi-wit-gen wit/ --out sdk --target ts,dart,java,csharp,swift --core rust
+```
+
+`--target` wählt die SDK-Sprachen, `--core` die Sprache des Cores (`rust`, `go`,
+`csharp`, `java`). In `sdk/` landen die ABI-Header, die SDKs samt Runtime und
+der Core-Glue samt Core-Runtime (z. B. das Crate `wabi-abi-rt`). Für Dart ist das
+ein vollständiges Paket (`flutter pub add <paket> --path sdk/dart`), für C# ein
+Projekt, das `dotnet pack` zu einem NuGet-Paket mit den nativen Bibliotheken
+macht. Rust- und Go-Cores baut `sdk/core-<lang>/build-native.sh` für alle
+Plattformen nach `sdk/native/`, von wo der Dart-Build-Hook (Flutter) und das
+NuGet-Paket sie ohne weitere Konfiguration übernehmen. Details,
+Optionen und ein lauffähiges Beispiel (WIT → Rust-Core → TypeScript in Bun):
+[generator/npm/README.md](generator/npm/README.md). Bauen und testen:
+`generator/npm/build.sh`, `generator/npm/test.sh`; veröffentlicht wird per Tag
+`wabi-wit-gen-v<version>` (`.github/workflows/wabi-wit-gen-release.yml`).
+
 ## Schnellstart
 
 ```bash
@@ -128,11 +152,11 @@ cargo run -- --root .. --check          # CI: Lock-Datei/generierter Code aktuel
 scripts/build-native.sh all             # Artefakte je Plattform (siehe unten)
 
 # Beispiele (Endpoint mem://… = In-Process-Backend, ws://… = echter WebSocket)
-export ACME_NATIVE_LIB=$PWD/core-rust/target/release/libacme_client.so
+export WABI_NATIVE_LIB=$PWD/core-rust/target/release/libwabi_client.so
 dotnet run --project examples/csharp
-sdk/java/build.sh && javac --release 22 -cp build/java/acme-client.jar -d build/ex examples/java/Example.java \
-  && java --enable-native-access=ALL-UNNAMED -cp build/java/acme-client.jar:build/ex Example
-cargo run --manifest-path core-rust/Cargo.toml --bin acme-mock-server   # ws://127.0.0.1:9001
+sdk/java/build.sh && javac --release 22 -cp build/java/wabi-client.jar -d build/ex examples/java/Example.java \
+  && java --enable-native-access=ALL-UNNAMED -cp build/java/wabi-client.jar:build/ex Example
+cargo run --manifest-path core-rust/Cargo.toml --bin wabi-mock-server   # ws://127.0.0.1:9001
 ```
 
 Benötigt: Rust ≥ 1.80, .NET 8, JDK ≥ 22 (Panama FFM ist ab 22 final), Dart ≥ 3.3,
@@ -140,13 +164,13 @@ Go ≥ 1.22, Zig 0.16 (optional), Swift ≥ 5.9 (macOS/Linux).
 
 ```bash
 (cd examples/dart && dart pub get && dart run bin/main.dart)
-(cd sdk/dart && dart test)                               # ACME_TEST_PROFILE=basic für den Zig-Stub
+(cd sdk/dart && dart test)                               # WABI_TEST_PROFILE=basic für den Zig-Stub
 ```
 
 ## Die öffentliche API in den Zielsprachen
 
 ```csharp
-var client = new AcmeClient(options);
+var client = new WabiClient(options);
 await client.ConnectAsync();
 Customer customer = await client.GetCustomerAsync("4711");
 await foreach (var evt in client.Events(cancellationToken)) { … }
@@ -155,7 +179,7 @@ await client.DisconnectAsync();
 ```
 
 ```java
-var client = new AcmeClient(options);
+var client = new WabiClient(options);
 client.connect().thenCompose(v -> client.getCustomer("4711"));
 CompletableFuture<Customer> customer = client.getCustomer("4711");
 Flow.Publisher<ClientEvent> events = client.events();
@@ -163,7 +187,7 @@ Flow.Publisher<ClientEvent> events = client.events();
 ```
 
 ```swift
-let client = AcmeClient(options: options)
+let client = WabiClient(options: options)
 try await client.connect()
 let customer = try await client.getCustomer(id: "4711")
 for try await event in client.events() { … }
@@ -171,7 +195,7 @@ for try await event in client.events() { … }
 ```
 
 ```dart
-final client = AcmeClient(options);
+final client = WabiClient(options);
 await client.connect();
 final customer = await client.getCustomer('4711');
 await for (final event in client.events()) { … }            // Stream<ClientEvent>
@@ -179,22 +203,25 @@ await client.getCustomer('4711', cancellationToken: token);   // optionaler Abbr
 // Fehler: on ClientErrorNotFound { … } bzw. switch (e) { ClientErrorNotFound() => … }
 ```
 
-Für Flutter siehe [docs/FLUTTER.md](docs/FLUTTER.md) (Bibliothek je Plattform
-mitliefern, Isolates/UI, Beispiel-Widget).
+Für Flutter siehe [docs/FLUTTER.md](docs/FLUTTER.md): Die Core-Bibliothek
+bündelt der Build-Hook des Pakets (Dart native assets) automatisch; dazu
+Isolates/UI und ein Beispiel-Widget ([examples/flutter](examples/flutter)).
 
 ## Projektstruktur
 
 ```
 wit/client.wit            öffentlicher Vertrag (async func, stream<T>, resource)
 wit/abi-ids.lock          append-only Tabelle aller numerischen Wire-IDs
-abi/acme_abi.h            die native ABI: Typen, Status, Capabilities
-abi/acme_abi_functions.h  die 17 Funktionen, pro WIT-Paket unter eigenem Symbol-Präfix
-generated/c/acme_client.h generierter Header des Pakets (acme_client_call_sync, …)
+abi/wabi_abi.h            die native ABI: Typen, Status, Capabilities
+abi/wabi_abi_functions.h  die 17 Funktionen, pro WIT-Paket unter eigenem Symbol-Präfix
+generated/c/wabi_client.h generierter Header des Pakets (wabi_client_call_sync, …)
 abi/ABI.md                normative Spezifikation: Ownership, Async, Streams, Threading, Encoding
-generator/                acme-wit-gen (Rust, nutzt wit-parser): WIT → C#, Java, Swift, Rust-Core-Glue
-generated/{csharp,java,swift,dart}   generierter SDK-Code (committed, --check in CI)
-runtime/{csharp,java,swift,dart}     handgeschriebene, generische SDK-Runtime
-sdk/{csharp,java,swift,dart}   Paketierung: Runtime + generierter Code (.csproj, build.sh, Package.swift, pubspec.yaml)
+generator/                wabi-wit-gen (Rust, nutzt wit-parser): WIT → C#, Java, Swift, Dart, TypeScript, Rust-/Go-Core-Glue
+generator/npm/            npm-Paket wabi-wit-gen (Generator als WebAssembly/WASI + Launcher, Beispiel, Tests)
+generator/runtime/{csharp,java,swift,dart,ts}   handgeschriebene, generische App-Runtimes; in den Generator
+                          eingebettet und bei jedem Lauf in generated/<lang> geschrieben (siehe unten)
+generated/{csharp,java,swift,dart,ts}   generierter SDK-Code inkl. Runtime (committed, --check in CI)
+sdk/{csharp,java,swift,dart}   Paketierung des generierten Codes (.csproj, build.sh, Package.swift, pubspec.yaml)
 core-rust/                Rust-Core
   src/api/                  idiomatischer async-Rust-Client (die eigentliche Logik)
   src/protocol/             Backend-Frames (JSON über WebSocket)
@@ -202,10 +229,10 @@ core-rust/                Rust-Core
   src/transport/            Transport-Abstraktion (+ mem:// Loopback)
   src/websocket/            tokio-tungstenite
   src/crypto/               HMAC-SHA256 Challenge/Response
-  src/mock/                 Mock-Backend (Tests, Beispiele, acme-mock-server)
+  src/mock/                 Mock-Backend (Tests, Beispiele, wabi-mock-server)
   src/generated/            aus WIT generiert: Typen, Codec, Trait, Dispatch
-runtime/rust/             generischer ABI-Adapter für Rust-Cores (Crate acme-abi-rt, inkl. Host-Calls)
-runtime/go/               generischer ABI-Adapter für Go-Cores (Modul acme.example/acmeabi, inkl. Host-Calls)
+runtime/rust/             generischer ABI-Adapter für Rust-Cores (Crate wabi-abi-rt, inkl. Host-Calls)
+runtime/go/               generischer ABI-Adapter für Go-Cores (Modul wabi.example/wabiabi, inkl. Host-Calls)
 runtime/csharp-core/      generischer ABI-Adapter für C#-Cores (NativeAOT, inkl. Host-Calls)
 alt-cores/go/             alternativer Core in Go (cgo, c-shared; Glue generiert)
 alt-cores/zig/            alternativer Stub-Core in Zig (eager, single-threaded)
@@ -213,7 +240,7 @@ alt-cores/csharp/         alternativer Core in C#, per NativeAOT zu einer native
 runtime/java-core/        generische Runtime für Java-Cores (GraalVM native-image, C-Shim)
 packages/pki/             3. WIT-Paket gematik:pki: Java-Core um gemLibPki (GraalVM), SDKs + Tests
 packages/zero/            2. WIT-Paket gematik:zero (Host-Calls): Cores Go (libzero), Rust, C#; SDKs + Tests
-examples/{csharp,java,swift,dart}
+examples/{csharp,java,swift,dart,flutter}
 tests/abi/conformance.c   sprachneutrale ABI-Konformität (dlopen, jeder Core)
 tests/compatibility/      Matrix-Runner + absichtlich inkompatible Fake-Cores
 tests/{csharp,java}       SDK-Testsuiten (Swift: sdk/swift/Tests, Dart: sdk/dart/test)
@@ -225,6 +252,32 @@ docs/ROADMAP.md           geplant: Generator-Emitter in Bun/TypeScript, JNI-Back
 docs/PACKAGING.md         Plan: gematik:pki als eigenes SDK-Repo mit NuGet/Maven/AAR/SwiftPM/pub-Paketen
 ```
 
+## Die Runtime reist mit dem generierten Code
+
+Die Runtimes für App-Sprachen (C#, Java inkl. JNI-Shim, Swift, Dart,
+TypeScript) sind handgeschrieben und vertragsneutral. Sie liegen in
+`generator/runtime/` und werden beim Bauen in `wabi-wit-gen` eingebettet
+(`generator/build.rs`). Bei jedem Lauf schreibt der Generator sie neben den
+generierten Code des Pakets, **im Namensraum des Pakets**:
+
+| Sprache | Ziel | Namensraum / Name |
+|---|---|---|
+| C# | `generated/csharp/Runtime/` | `<Ns>.Runtime`, z. B. `Gematik.Pki.Runtime` |
+| Java | `generated/java/<paket>/runtime/`, `generated/java/jni/` | `com.gematik.pki.runtime`; JNI-Shim `libgematik_pki_jni` |
+| Swift | `generated/swift/Runtime/` | Modul des SDK; C-Modul `C<Modul>`, z. B. `CGematikPki` |
+| Dart | `generated/dart/runtime/` | Bibliothek des SDK-Pakets |
+| TypeScript | `generated/ts/runtime/` | Modul des SDK-Pakets |
+
+Damit braucht ein SDK-Build nur den Generator (keine zweite Abhängigkeit, die
+zur Generator-Version passen muss), und zwei mit `wabi-wit-gen` erzeugte SDKs,
+etwa `gematik:zero` und `gematik:pki`, lassen sich in **einer** App nutzen, ohne
+dass Klassen, Namespaces, C-Module oder JNI-Symbole kollidieren. Die Kopien
+tragen den Hinweis „DO NOT EDIT“; geändert wird nur `generator/runtime/`.
+
+Die Runtimes für Cores (`runtime/rust`, `runtime/go`, `runtime/csharp-core`,
+`runtime/java-core`) bleiben Bibliotheken: Jeder Core ist eine eigene native
+Bibliothek, Kollisionen gibt es dort nicht.
+
 ## Java: zwei Bindings, eine API
 
 Die generierten Klassen und die gesamte Async-Logik sehen nur `AbiCalls` (die
@@ -233,9 +286,9 @@ Die generierten Klassen und die gesamte Async-Logik sehen nur `AbiCalls` (die
 | | Panama FFM | JNI |
 |---|---|---|
 | Wo | JDK 22+ (Desktop/Server) | **Android** (ART) und JDK 17+ |
-| Code | `PanamaAbi` + generiertes `NativeAbi` | `JniAbi` + generischer C-Shim `runtime/java/jni/acme_jni.c` (`libacme_jni`) |
-| Artefakt | `build/java/acme-client.jar` | `acme-client-android.jar` (Java-17-Bytecode, ohne Panama-Klassen) + `libacme_jni.so` je ABI (`runtime/java/jni/CMakeLists.txt`) |
-| Auswahl | automatisch; erzwingen mit `-Dacme.binding=panama\|jni` | |
+| Code | `PanamaAbi` + generiertes `NativeAbi` | `JniAbi` + C-Shim `generated/java/jni/<präfix>_jni.c` (`libwabi_client_jni`, je Paket eigener Name) |
+| Artefakt | `build/java/wabi-client.jar` | `wabi-client-android.jar` (Java-17-Bytecode, ohne Panama-Klassen) + `libwabi_client_jni.so` je ABI (`generated/java/jni/CMakeLists.txt`) |
+| Auswahl | automatisch; erzwingen mit `-Dwabi.binding=panama\|jni`; Shim-Pfad für Tests: `-D<paket>.runtime.jniLib=…` | |
 
 Der Shim ist vertragsneutral: Er lädt den Core per `dlopen` und leitet die 17
 Funktionen weiter. Neue WIT-Methoden und ein Wechsel der Core-Sprache
@@ -250,7 +303,7 @@ sonst ab).
   groß das WIT wird. Records werden als Maps mit Feld-Tags kodiert, sodass
   optionale Felder in beide Richtungen evolvieren können.
 * **Future = Signal + `take`** (§4.3): Der Callback meldet nur „fertig“, das
-  Ergebnis holt der Host mit `acme_future_take`. Das ist Ownership-einfach,
+  Ergebnis holt der Host mit `wabi_future_take`. Das ist Ownership-einfach,
   der Callback ist O(1), es gibt kein Reentrancy-Problem und Polling
   funktioniert ohne Callback.
 * **Erster Übergang gewinnt** (§4.1): löst jede Cancel/Completion-Race; der
@@ -271,12 +324,12 @@ sonst ab).
 
 | Plattform | Artefakt | In diesem PoC gebaut |
 |---|---|---|
-| Linux x64 | `build/native/linux-x64/libacme_client.so` | ✅ |
-| Linux arm64 | `build/native/linux-arm64/libacme_client.so` (Zig als Cross-Linker) | ✅ |
-| Windows x64 | `build/native/win-x64/acme_client.dll` (MSVC oder mingw) | ✅ (mingw, 17 Exporte geprüft) |
-| macOS | `build/native/osx/libacme_client.dylib` (universal) | Skript, braucht macOS |
-| iOS | `build/native/apple/AcmeClient.xcframework` (Device + Simulator + macOS, inkl. Header/Modulemap) | Skript, braucht Xcode |
-| Android | `build/native/android/jniLibs/<abi>/libacme_client.so` (arm64-v8a, armeabi-v7a, x86_64, x86) | Skript, braucht NDK + cargo-ndk |
+| Linux x64 | `build/native/linux-x64/libwabi_client.so` | ✅ |
+| Linux arm64 | `build/native/linux-arm64/libwabi_client.so` (Zig als Cross-Linker) | ✅ |
+| Windows x64 | `build/native/win-x64/wabi_client.dll` (MSVC oder mingw) | ✅ (mingw, 17 Exporte geprüft) |
+| macOS | `build/native/osx/libwabi_client.dylib` (universal) | Skript, braucht macOS |
+| iOS | `build/native/apple/WabiClient.xcframework` (Device + Simulator + macOS, inkl. Header/Modulemap) | Skript, braucht Xcode |
+| Android | `build/native/android/jniLibs/<abi>/libwabi_client.so` (arm64-v8a, armeabi-v7a, x86_64, x86) | Skript, braucht NDK + cargo-ndk |
 
 Ein Go- oder Zig-Core muss lediglich Dateien mit denselben Namen liefern.
 
@@ -284,7 +337,7 @@ Ein Go- oder Zig-Core muss lediglich Dateien mit denselben Namen liefern.
 
 Ausprobiert mit einer Kopie des Repos:
 `ping: async func(payload: list<u8>) -> result<u32, client-error>;` einfügen →
-`acme-wit-gen` vergibt `0x0108` (angehängt, keine andere ID ändert sich) und
+`wabi-wit-gen` vergibt `0x0108` (angehängt, keine andere ID ändert sich) und
 erzeugt `Task<uint> PingAsync(byte[], CancellationToken)`,
 `CompletableFuture<Integer> ping(byte[])` und
 `func ping(payload: [UInt8]) async throws -> UInt32`. C#- und Java-SDK bauen
@@ -297,29 +350,38 @@ Geschäftslogik ist die einzige Stelle, an der ein Mensch etwas schreiben muss.
 ## Zusammenfassung: wer ist wofür zuständig?
 
 ### Was wird aus WIT generiert?
-Von `acme-wit-gen`, aus `wit/client.wit` + `wit/abi-ids.lock`:
+Von `wabi-wit-gen`, aus `wit/client.wit` + `wit/abi-ids.lock`:
 
 * **C#:** `sealed record`s, Enums (Wert = Wire-Tag), Variants als geschlossene
   `abstract record`-Hierarchien, `ClientException`, der Payload-Codec
-  (`WireCodec`), die Client-Klasse `AcmeClient` (`Task`, `IAsyncEnumerable`,
+  (`WireCodec`), die Client-Klasse `WabiClient` (`Task`, `IAsyncEnumerable`,
   `CancellationToken`), `MethodIds`, `Contract`, die P/Invoke-Deklarationen.
 * **Java:** Records, Enums, `sealed interface`s, `ClientException`, Codec,
-  `AcmeClient` (`CompletableFuture`, `Flow.Publisher`), `MethodIds`,
+  `WabiClient` (`CompletableFuture`, `Flow.Publisher`), `MethodIds`,
   `Contract`, Panama-FFM-Downcall-Bindings (`NativeAbi`).
 * **Swift:** `struct`s, `enum`s (mit Associated Values), `Error`-Konformität,
-  Codec-Extensions, `AcmeClient` (`async throws`, `AcmeStream`), ABI-Konstanten.
+  Codec-Extensions, `WabiClient` (`async throws`, `WabiStream`), ABI-Konstanten.
 * **Dart:** unveränderliche Klassen mit Wertgleichheit, Enhanced Enums,
   `sealed class`-Hierarchien (Fehlertypen `implements Exception`), Codec,
-  `AcmeClient` (`Future`, `Stream`, `CancellationToken`), `dart:ffi`-Bindings.
+  `WabiClient` (`Future`, `Stream`, `CancellationToken`), `dart:ffi`-Bindings.
+* **TypeScript (Bun):** Interfaces für Records, String-Unions für Enums,
+  diskriminierte Unions `{ tag, value }` für Variants, `<E>Exception`-Klassen,
+  Codec, Client-Klasse (`Promise`, `AsyncIterableIterator`, `AbortSignal`,
+  `Symbol.dispose`), Host-Registrierung und die `bun:ffi`-Bindings der ABI
+  (Target `ts`; bisher für `packages/zero` eingeschaltet).
 * **Rust-Core:** Typen, Codec, ein Trait pro Ressource (`ClientResource`), der
   `method_id`-Dispatcher.
+* **Go-, C#- und Java-Core:** ebenso Interfaces pro Ressource und der
+  Dispatcher; beim C#-Core (Target `csharp-core`) außerdem Symbol-Präfix,
+  Contract-ID und typisierte Clients für die WIT-Imports (Host-Calls). Ein
+  C#-Core besteht damit nur noch aus `Core : ICore` und der Geschäftslogik.
 * **Lock-Datei:** neue IDs werden angehängt.
 
 Die P/Invoke- und FFM-Tabellen kommen aus einer einzigen ABI-Tabelle im
-Generator, die gegen `acme_abi.h`/`acme_abi_functions.h` geprüft wird. Sie wachsen nicht mit dem WIT.
+Generator, die gegen `wabi_abi.h`/`wabi_abi_functions.h` geprüft wird. Sie wachsen nicht mit dem WIT.
 
 ### Was ist handgeschrieben?
-* `wit/client.wit` (der Vertrag), `abi/acme_abi.h`, `abi/acme_abi_functions.h` + `ABI.md`.
+* `wit/client.wit` (der Vertrag), `abi/wabi_abi.h`, `abi/wabi_abi_functions.h` + `ABI.md`.
 * Pro Sprache genau eine **generische Runtime** (`runtime/*`): MessagePack,
   Object-Handles, Buffer-Ownership, Future→Task/CompletableFuture/async,
   Stream→IAsyncEnumerable/Flow/AsyncSequence, Cancellation, Fehlerdekodierung,
@@ -331,10 +393,10 @@ Generator, die gegen `acme_abi.h`/`acme_abi_functions.h` geprüft wird. Sie wach
 Alles unterhalb der ABI: Geschäftslogik, Tokio vs. Goroutinen vs. eager,
 WebSocket-Implementierung, Backend-Protokoll (JSON-Frames), Korrelation,
 Krypto, Handle-Tabelle, Future-Zustandsautomat, Allocator (`Box<[u8]>` /
-`C.malloc` / `c_allocator`) und damit auch `acme_buffer_free`.
+`C.malloc` / `c_allocator`) und damit auch `wabi_buffer_free`.
 
 ### Was ist ABI-spezifisch?
-`acme_abi.h` / `acme_abi_functions.h` / `ABI.md`: 17 Funktionen (mit Paket-Präfix), Status- und Capability-Codes,
+`wabi_abi.h` / `wabi_abi_functions.h` / `ABI.md`: 17 Funktionen (mit Paket-Präfix), Status- und Capability-Codes,
 Handle-Regeln, Future/Stream-Protokoll, Threading-Regeln, Payload-Encoding v1,
 Method-ID-Schema. Sowohl Cores als auch SDK-Runtimes implementieren das; es ist
 die einzige gemeinsame Abhängigkeit.
@@ -352,10 +414,10 @@ Dazu kommen die Namens- und Typabbildung im jeweiligen Emitter des Generators.
 **Alles oberhalb der ABI:** `client.wit`, `abi-ids.lock`, die ABI-Header,
 der gesamte generierte SDK-Code, die SDK-Runtimes, die Pakete, die Beispiele
 und die Testsuiten, und zwar bis auf die **kompilierten Binaries**. Die
-Matrix lädt dieselbe `Acme.Client.Tests.dll` und dieselbe `acme-client.jar`
-gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
+Matrix lädt dieselbe `Wabi.Client.Tests.dll` und dieselbe `wabi-client.jar`
+gegen `libwabi_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
 `core-rust/` (Logik + generierter Glue; der ABI-Adapter liegt paketunabhängig in `runtime/rust`) durch `alt-cores/go/`
-(Logik `client.go` + generiertes `acme_generated.go` + Runtime `runtime/go`) bzw. `alt-cores/zig/`.
+(Logik `client.go` + generiertes `wabi_generated.go` + Runtime `runtime/go`) bzw. `alt-cores/zig/`.
 
 ## Bekannte Grenzen des PoC
 
@@ -365,8 +427,7 @@ gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
   es noch nicht (kein Android-SDK in dieser Umgebung).
 * **Host-Calls im Core:** Go, Rust und C# können Host-Calls auslösen, Zig noch
   nicht (Roadmap). Host-Calls kennen noch keinen eigenen Abbruch in Richtung App
-  und keine Streams/Ressourcen als Parameter. Die Dispatch-Tabelle der C#-Cores
-  ist handgeschrieben (kein C#-Core-Emitter).
+  und keine Streams/Ressourcen als Parameter.
 * **libzero:** Genutzt wird bisher nur `util.Jwk` (Thumbprint); das `dpop`-Paket
   von zero-lab ist in libzero v0.1.0 nicht veröffentlicht, der Proof entsteht
   deshalb mit jwx (das libzero selbst verwendet).
@@ -379,3 +440,17 @@ gegen `libacme_client.so` aus Rust, Go und Zig. Ersetzt wird ausschließlich
 * **Unbekannte Variant-Cases** eines neueren Cores führen in älteren SDKs zu
   einem Protokollfehler. Ein generierter `Unknown`-Case wäre eine mögliche
   Erweiterung.
+
+## Lizenz
+
+Apache-2.0 (`LICENSE` und `NOTICE` im Wurzelverzeichnis). Ausnahme:
+`packages/pki/core-go` steht unter EUPL-1.2 (baut auf gematik gempki auf, siehe
+`packages/pki/core-go/README.md`). Die Go-Cores binden gematik zero-lab
+(gempki, libzero, beide EUPL-1.2) ein; daraus gebaute native Bibliotheken
+enthalten diesen Code.
+
+**Generierter Code:** Was `wabi-wit-gen` erzeugt, einschließlich der Runtimes,
+die der Generator neben den generierten Code kopiert (`generated/*/runtime`,
+JNI-Shim, `wabi-abi-rt` usw.), gehört dem, der den Generator ausführt. Es darf
+ohne Lizenzhinweis unter jeder Lizenz verwendet werden, auch in proprietären
+Apps und SDKs.

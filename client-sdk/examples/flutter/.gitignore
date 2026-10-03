@@ -1,0 +1,14 @@
+# Platform projects are created in CI with `flutter create --platforms=... .`
+/android/
+/ios/
+/macos/
+/linux/
+/windows/
+/web/
+/build/
+.dart_tool/
+.flutter-plugins*
+.metadata
+pubspec.lock
+*.iml
+.idea/

@@ -79,7 +79,7 @@ static void answer(uint32_t method, const uint8_t *req, size_t len, uint64_t cal
     buf w = {.n = 0};
     if (reply_status_override) {
         const char *msg = "keystore exploded";
-        gematik_zero_host_reply(call, reply_status_override, (acme_bytes){(const uint8_t *)msg, strlen(msg)});
+        gematik_zero_host_reply(call, reply_status_override, (wabi_bytes){(const uint8_t *)msg, strlen(msg)});
         return;
     }
     if (strcmp(key_id, "dpop-key") != 0) { /* result err: zero-error.key-not-found(key-id) */
@@ -100,11 +100,11 @@ static void answer(uint32_t method, const uint8_t *req, size_t len, uint64_t cal
         CHECK(ok, "app could not sign the digest");
         put_u8(&w, 0x92); put_u8(&w, 0); put_bin(&w, sig, slen); /* ASN.1 DER, like platform keystores */
     } else {
-        gematik_zero_host_reply(call, ACME_ERR_UNKNOWN_METHOD, (acme_bytes){NULL, 0});
+        gematik_zero_host_reply(call, WABI_ERR_UNKNOWN_METHOD, (wabi_bytes){NULL, 0});
         return;
     }
-    CHECK(gematik_zero_host_reply(call, ACME_OK, (acme_bytes){w.b, w.n}) == ACME_OK, "host_reply");
-    CHECK(gematik_zero_host_reply(call, ACME_OK, (acme_bytes){w.b, w.n}) == ACME_ERR_INVALID_HANDLE,
+    CHECK(gematik_zero_host_reply(call, WABI_OK, (wabi_bytes){w.b, w.n}) == WABI_OK, "host_reply");
+    CHECK(gematik_zero_host_reply(call, WABI_OK, (wabi_bytes){w.b, w.n}) == WABI_ERR_INVALID_HANDLE,
           "a second reply to the same call must be rejected");
 }
 
@@ -142,8 +142,8 @@ static void on_host_call(void *user_data, uint32_t method, const uint8_t *req, s
 static uint64_t new_signer(const char *key_id) {
     buf w = {.n = 0};
     put_u8(&w, 0x91); put_str(&w, key_id);
-    acme_buffer out;
-    CHECK(gematik_zero_call_sync(0, M_CTOR, (acme_bytes){w.b, w.n}, &out) == ACME_OK, "ctor");
+    wabi_buffer out;
+    CHECK(gematik_zero_call_sync(0, M_CTOR, (wabi_bytes){w.b, w.n}, &out) == WABI_OK, "ctor");
     uint64_t h = 0;
     if (out.len == 9 && out.ptr[0] == 0xcf) for (int i = 1; i < 9; i++) h = h << 8 | out.ptr[i];
     gematik_zero_buffer_free(out);
@@ -152,12 +152,12 @@ static uint64_t new_signer(const char *key_id) {
 }
 
 /* Runs an async call and waits; returns the status, copies the payload. */
-static acme_status await_call(uint64_t obj, uint32_t method, buf *req, buf *res) {
+static wabi_status await_call(uint64_t obj, uint32_t method, buf *req, buf *res) {
     uint64_t f = 0;
-    acme_status st = gematik_zero_call_async(obj, method, (acme_bytes){req->b, req->n}, &f);
-    if (st != ACME_OK) return st;
-    for (int i = 0; i < 5000 && gematik_zero_future_poll(f) == ACME_PENDING; i++) usleep(1000);
-    acme_buffer out;
+    wabi_status st = gematik_zero_call_async(obj, method, (wabi_bytes){req->b, req->n}, &f);
+    if (st != WABI_OK) return st;
+    for (int i = 0; i < 5000 && gematik_zero_future_poll(f) == WABI_PENDING; i++) usleep(1000);
+    wabi_buffer out;
     st = gematik_zero_future_take(f, &out);
     res->n = 0;
     if (out.len < sizeof res->b) put(res, out.ptr, out.len);
@@ -272,27 +272,27 @@ int main(void) {
 
     /* metadata */
     CHECK(gematik_zero_abi_version() == ((1u << 16) | 1u), "abi 1.1");
-    CHECK(gematik_zero_abi_capabilities() & ACME_CAP_HOST_CALLS, "capability HOST_CALLS");
+    CHECK(gematik_zero_abi_capabilities() & WABI_CAP_HOST_CALLS, "capability HOST_CALLS");
     CHECK(strcmp(gematik_zero_contract_id(), "gematik:zero@0.1.0") == 0, "contract id");
 
     uint64_t signer = new_signer("dpop-key");
 
     /* 1. no handler registered: a domain error, never a hang */
-    CHECK(await_call(signer, M_THUMBPRINT, &none, &res) == ACME_OK, "thumbprint without handler");
+    CHECK(await_call(signer, M_THUMBPRINT, &none, &res) == WABI_OK, "thumbprint without handler");
     CHECK(!result_string(&res, &tag) && tag == ZERO_CRYPTO, "no handler -> zero-error.crypto (tag %d)", tag);
 
-    CHECK(gematik_zero_host_register(on_host_call, (void *)&app_key) == ACME_OK, "host_register");
+    CHECK(gematik_zero_host_register(on_host_call, (void *)&app_key) == WABI_OK, "host_register");
 
     /* 2. thumbprint (libzero) matches an independent RFC 7638 computation */
     char want[64];
     expected_thumbprint(want);
-    CHECK(await_call(signer, M_THUMBPRINT, &none, &res) == ACME_OK, "thumbprint");
+    CHECK(await_call(signer, M_THUMBPRINT, &none, &res) == WABI_OK, "thumbprint");
     char *tp = result_string(&res, &tag);
     CHECK(tp && strcmp(tp, want) == 0, "thumbprint %s, expected %s", tp ? tp : "(error)", want);
 
     /* 3. DPoP proof: the signature was made by the app's key */
     buf req = proof_request("access-token-123", "server-nonce");
-    CHECK(await_call(signer, M_CREATE_PROOF, &req, &res) == ACME_OK, "create-proof");
+    CHECK(await_call(signer, M_CREATE_PROOF, &req, &res) == WABI_OK, "create-proof");
     char *jwt = result_string(&res, &tag);
     CHECK(jwt != NULL, "create-proof ok (err tag %d)", tag);
     if (jwt) {
@@ -325,14 +325,14 @@ int main(void) {
         char url[64];
         snprintf(url, sizeof url, "https://zero.example/r/%d", i);
         put_u8(&r, 0x94); put_str(&r, "POST"); put_str(&r, url); put_u8(&r, 0xc0); put_u8(&r, 0xc0);
-        CHECK(gematik_zero_call_async(i % 4 == 3 ? stranger : signer, M_CREATE_PROOF, (acme_bytes){r.b, r.n}, &fs[i]) == ACME_OK,
+        CHECK(gematik_zero_call_async(i % 4 == 3 ? stranger : signer, M_CREATE_PROOF, (wabi_bytes){r.b, r.n}, &fs[i]) == WABI_OK,
               "async %d", i);
     }
     int matched = 0;
     for (int i = 0; i < PAR; i++) {
-        for (int k = 0; k < 10000 && gematik_zero_future_poll(fs[i]) == ACME_PENDING; k++) usleep(1000);
-        acme_buffer out;
-        CHECK(gematik_zero_future_take(fs[i], &out) == ACME_OK, "concurrent take %d", i);
+        for (int k = 0; k < 10000 && gematik_zero_future_poll(fs[i]) == WABI_PENDING; k++) usleep(1000);
+        wabi_buffer out;
+        CHECK(gematik_zero_future_take(fs[i], &out) == WABI_OK, "concurrent take %d", i);
         buf b = {.n = 0};
         put(&b, out.ptr, out.len);
         gematik_zero_buffer_free(out);
@@ -356,12 +356,12 @@ int main(void) {
 
     /* 5. the app's domain error travels back to the caller */
     uint64_t unknown = new_signer("no-such-key");
-    CHECK(await_call(unknown, M_CREATE_PROOF, &req, &res) == ACME_OK, "unknown key call");
+    CHECK(await_call(unknown, M_CREATE_PROOF, &req, &res) == WABI_OK, "unknown key call");
     CHECK(!result_string(&res, &tag) && tag == ZERO_KEY_NOT_FOUND, "key-not-found propagated (tag %d)", tag);
 
     /* 6. the app answers with an ABI error status */
-    reply_status_override = ACME_ERR_INTERNAL;
-    CHECK(await_call(signer, M_THUMBPRINT, &none, &res) == ACME_OK, "status override call");
+    reply_status_override = WABI_ERR_INTERNAL;
+    CHECK(await_call(signer, M_THUMBPRINT, &none, &res) == WABI_OK, "status override call");
     CHECK(!result_string(&res, &tag) && tag == ZERO_CRYPTO, "error status -> crypto error (tag %d)", tag);
     reply_status_override = 0;
 
@@ -369,32 +369,32 @@ int main(void) {
     int before = atomic_load(&handler_calls);
     buf bad = {.n = 0};
     put_u8(&bad, 0x94); put_str(&bad, ""); put_str(&bad, "ftp://x"); put_u8(&bad, 0xc0); put_u8(&bad, 0xc0);
-    CHECK(await_call(signer, M_CREATE_PROOF, &bad, &res) == ACME_OK, "invalid input call");
+    CHECK(await_call(signer, M_CREATE_PROOF, &bad, &res) == WABI_OK, "invalid input call");
     CHECK(!result_string(&res, &tag) && tag == ZERO_INVALID_INPUT, "invalid-input (tag %d)", tag);
     CHECK(atomic_load(&handler_calls) == before, "no host call for invalid input");
 
     /* 8. unknown call ids */
-    CHECK(gematik_zero_host_reply(0x7fffffff, ACME_OK, (acme_bytes){NULL, 0}) == ACME_ERR_INVALID_HANDLE, "unknown call id");
+    CHECK(gematik_zero_host_reply(0x7fffffff, WABI_OK, (wabi_bytes){NULL, 0}) == WABI_ERR_INVALID_HANDLE, "unknown call id");
 
     /* 9. cancel while a host call is open; the late reply is accepted and discarded */
     uint64_t slow = new_signer("slow-key"), f = 0;
-    CHECK(gematik_zero_call_async(slow, M_THUMBPRINT, (acme_bytes){none.b, none.n}, &f) == ACME_OK, "slow call");
+    CHECK(gematik_zero_call_async(slow, M_THUMBPRINT, (wabi_bytes){none.b, none.n}, &f) == WABI_OK, "slow call");
     for (int i = 0; i < 5000 && atomic_load(&held_calls) == 0; i++) usleep(1000);
     CHECK(atomic_load(&held_calls) == 1, "host call is open");
-    CHECK(gematik_zero_future_cancel(f) == ACME_OK, "cancel");
-    for (int i = 0; i < 5000 && gematik_zero_future_poll(f) == ACME_PENDING; i++) usleep(1000);
-    acme_buffer out;
-    CHECK(gematik_zero_future_take(f, &out) == ACME_ERR_CANCELLED, "cancelled while the app was busy");
+    CHECK(gematik_zero_future_cancel(f) == WABI_OK, "cancel");
+    for (int i = 0; i < 5000 && gematik_zero_future_poll(f) == WABI_PENDING; i++) usleep(1000);
+    wabi_buffer out;
+    CHECK(gematik_zero_future_take(f, &out) == WABI_ERR_CANCELLED, "cancelled while the app was busy");
     gematik_zero_buffer_free(out);
     gematik_zero_future_drop(f);
     uint8_t late[] = {0x92, 0x01, 0x92, 0x01, 0xa1, 'x'};
-    CHECK(gematik_zero_host_reply(atomic_load(&held_call), ACME_OK, (acme_bytes){late, sizeof late}) == ACME_OK,
+    CHECK(gematik_zero_host_reply(atomic_load(&held_call), WABI_OK, (wabi_bytes){late, sizeof late}) == WABI_OK,
           "late reply after cancellation is accepted (frees the request)");
 
     gematik_zero_object_drop(slow);
     gematik_zero_object_drop(unknown);
     gematik_zero_object_drop(signer);
-    CHECK(gematik_zero_host_register(NULL, NULL) == ACME_OK, "unregister");
+    CHECK(gematik_zero_host_register(NULL, NULL) == WABI_OK, "unregister");
     usleep(20000); /* let detached app threads finish */
     EVP_PKEY_free(app_key);
     printf("host calls: %d checks, %d failures\n", atomic_load(&checks), atomic_load(&failures));

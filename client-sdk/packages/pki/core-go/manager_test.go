@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gematik/zero-lab/go/gempki"
+
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -352,5 +354,80 @@ func TestRefreshTsl(t *testing.T) {
 	}
 	if _, e := v.RefreshTsl(context.Background(), p.server.URL+"/tsl"); e == nil || e.Tag != PkiErrorDownloadFailed {
 		t.Fatalf("URL without .xml: %+v", e)
+	}
+}
+
+func TestSetTslInvalidatesOCSPAndPreservesCounters(t *testing.T) {
+	p := newTestPKI(t)
+	v := p.verifier()
+	for i := 0; i < 2; i++ {
+		if _, e := p.verify(t, v, true); e != nil {
+			t.Fatalf("initial verification: %+v", e)
+		}
+	}
+	if _, e := v.SetTsl(p.makeTSL(2)); e != nil {
+		t.Fatal(e)
+	}
+	if stats := v.CacheStats(); stats.OcspEntries != 0 || stats.OcspHits != 1 || stats.OcspMisses != 1 {
+		t.Fatalf("new generation must retain counts, not entries: %+v", stats)
+	}
+	p.mu.Lock()
+	p.revoked = true
+	p.mu.Unlock()
+	if _, e := p.verify(t, v, true); e == nil || e.VerificationFailed.Code != "SW_1047_CERT_REVOKED" {
+		t.Fatalf("old good response survived TSL change: %+v", e)
+	}
+	if p.ocspRequests.Load() != 2 {
+		t.Fatalf("new generation did not fetch: %d", p.ocspRequests.Load())
+	}
+	if stats := v.CacheStats(); stats.OcspHits != 1 || stats.OcspMisses != 2 {
+		t.Fatalf("counts must span generations: %+v", stats)
+	}
+}
+
+func TestOCSPRequestsInFlightStayWithOldVerifierGeneration(t *testing.T) {
+	p := newTestPKI(t)
+	v := p.verifier()
+	old, err := v.current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered, resume, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		_, err := old.ocsp.check(context.Background(), p.ee, p.ca, time.Now(),
+			func(context.Context) (*gempki.RevocationResult, error) {
+				close(entered)
+				<-resume
+				return &gempki.RevocationResult{Status: gempki.RevocationStatusGood, NextUpdate: time.Now().Add(time.Minute)}, nil
+			})
+		done <- err
+	}()
+	<-entered // the old request is definitely in flight
+	_, e := v.SetTsl(p.makeTSL(2))
+	close(resume)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if e != nil {
+		t.Fatal(e)
+	}
+	current, err := v.current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.ocsp == old.ocsp || current == old {
+		t.Fatal("TSL generations share a cache")
+	}
+	if stats := v.CacheStats(); stats.OcspEntries != 0 || stats.OcspMisses != 1 {
+		t.Fatalf("late old response populated the new cache: %+v", stats)
+	}
+	// Identical parsing snapshots may be shared, HTTP results may not.
+	other := p.verifier()
+	second, err := other.current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.tsl != old.tsl || second.ocsp == old.ocsp {
+		t.Fatal("parsed snapshots should be shared, OCSP caches must be private")
 	}
 }

@@ -1,14 +1,15 @@
 // Business logic of the gematik:zero C# core: RFC 9449 DPoP proofs. The private
-// key stays in the app; every signature is a host call (import host-keys).
+// key stays in the app; every signature is a host call (import host-keys, client
+// generated in generated/CoreContract.g.cs). Domain errors: ZeroException.
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Gematik.Zero;
 
-namespace Acme.Core;
+namespace Wabi.Core;
 
-sealed class DpopSigner(string keyId) : ICoreObject
+sealed class DpopSigner(string keyId) : IDpopSigner
 {
     /// <summary>SubjectPublicKeyInfo header for id-ecPublicKey / prime256v1 (+ 65-byte point).</summary>
     private static readonly byte[] SpkiPrefix =
@@ -16,44 +17,41 @@ sealed class DpopSigner(string keyId) : ICoreObject
 
     public void Close() { }
 
-    private static ZeroError Crypto(string m) => new ZeroError.Crypto(m);
+    private static ZeroException Crypto(string m) => new(new ZeroError.Crypto(m));
 
     private static string B64Url(ReadOnlySpan<byte> b) =>
         Convert.ToBase64String(b).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private async Task<(string? X, string? Y, ZeroError? Error)> PublicJwkAsync(CancellationToken ct)
+    private async Task<(string X, string Y)> PublicJwkAsync(CancellationToken ct)
     {
-        byte[]? der;
-        ZeroError? error;
+        byte[] der;
         try
         {
-            (der, error) = await HostKeys.PublicKeyAsync(keyId, ct).ConfigureAwait(false);
+            der = await HostKeys.PublicKeyAsync(keyId, ct).ConfigureAwait(false); // app errors: ZeroException
         }
         catch (HostCallException e)
         {
-            return (null, null, Crypto($"host-keys: {e.Message}"));
+            throw Crypto($"host-keys: {e.Message}");
         }
-        if (error is not null) return (null, null, error);
         if (der is not { Length: 91 } || !der.AsSpan(0, 26).SequenceEqual(SpkiPrefix) || der[26] != 0x04)
-            return (null, null, Crypto("public key: expected EC P-256 SubjectPublicKeyInfo"));
-        return (B64Url(der.AsSpan(27, 32)), B64Url(der.AsSpan(59, 32)), null);
+            throw Crypto("public key: expected EC P-256 SubjectPublicKeyInfo");
+        return (B64Url(der.AsSpan(27, 32)), B64Url(der.AsSpan(59, 32)));
     }
 
-    public async Task<(string?, ZeroError?)> ThumbprintAsync(CancellationToken ct)
+    public async Task<string> ThumbprintAsync(CancellationToken cancellationToken)
     {
-        var (x, y, error) = await PublicJwkAsync(ct).ConfigureAwait(false);
-        if (error is not null) return (null, error);
+        var (x, y) = await PublicJwkAsync(cancellationToken).ConfigureAwait(false);
         // RFC 7638: required members in lexicographic order, no whitespace.
         var canonical = $"{{\"crv\":\"P-256\",\"kty\":\"EC\",\"x\":\"{x}\",\"y\":\"{y}\"}}";
-        return (B64Url(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))), null);
+        return B64Url(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
-    public async Task<(string?, ZeroError?)> CreateProofAsync(string method, string url, string? accessToken, string? nonce, CancellationToken ct)
+    public async Task<string> CreateProofAsync(string httpMethod, string httpUrl, string? accessToken, string? nonce,
+        CancellationToken cancellationToken)
     {
-        if (method.Length == 0 || !url.StartsWith("http", StringComparison.Ordinal))
-            return (null, new ZeroError.InvalidInput("http-method and an absolute http(s) http-url are required"));
-        var (x, y, error) = await PublicJwkAsync(ct).ConfigureAwait(false);
-        if (error is not null) return (null, error);
+        if (httpMethod.Length == 0 || !httpUrl.StartsWith("http", StringComparison.Ordinal))
+            throw new ZeroException(new ZeroError.InvalidInput("http-method and an absolute http(s) http-url are required"));
+        var (x, y) = await PublicJwkAsync(cancellationToken).ConfigureAwait(false);
 
         var header = Json(w =>
         {
@@ -69,26 +67,25 @@ sealed class DpopSigner(string keyId) : ICoreObject
         var claims = Json(w =>
         {
             w.WriteString("jti", B64Url(RandomNumberGenerator.GetBytes(16)));
-            w.WriteString("htm", method);
-            w.WriteString("htu", url);
+            w.WriteString("htm", httpMethod);
+            w.WriteString("htu", httpUrl);
             w.WriteNumber("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             if (accessToken is not null) w.WriteString("ath", B64Url(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken))));
             if (nonce is not null) w.WriteString("nonce", nonce);
         });
         var input = $"{B64Url(header)}.{B64Url(claims)}";
 
-        byte[]? der;
+        byte[] der;
         try
         {
-            (der, error) = await HostKeys.SignAsync(keyId, SHA256.HashData(Encoding.ASCII.GetBytes(input)), ct).ConfigureAwait(false);
+            der = await HostKeys.SignAsync(keyId, SHA256.HashData(Encoding.ASCII.GetBytes(input)), cancellationToken).ConfigureAwait(false);
         }
         catch (HostCallException e)
         {
-            return (null, Crypto($"host-keys: {e.Message}"));
+            throw Crypto($"host-keys: {e.Message}");
         }
-        if (error is not null) return (null, error);
-        var jose = DerToJose(der!);
-        return jose is null ? (null, Crypto("signature: expected an ASN.1 DER ECDSA signature")) : ($"{input}.{B64Url(jose)}", null);
+        var jose = DerToJose(der) ?? throw Crypto("signature: expected an ASN.1 DER ECDSA signature");
+        return $"{input}.{B64Url(jose)}";
     }
 
     private static byte[] Json(Action<Utf8JsonWriter> body)

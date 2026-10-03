@@ -1,40 +1,40 @@
-# Acme wire-identifier lock file — maintained by acme-wit-gen, commit it.
+# Wabi wire-identifier lock file — maintained by wabi-wit-gen, commit it.
 #
 # Pins every numeric identifier that appears on the native ABI or in a payload
 # (method ids, record field tags, variant/enum case tags). It is APPEND-ONLY:
 #   * new WIT items get the next free number in their scope,
 #   * existing entries are never renumbered, so reordering client.wit is safe,
 #   * removed items stay here as `retired`; their number is never reused,
-#   * `acme-wit-gen --check` (CI) fails if this file would change.
+#   * `wabi-wit-gen --check` (CI) fails if this file would change.
 #
 # kind     qualified-name                                     id
-field      acme:client/types.customer.id                            1
-field      acme:client/types.customer.name                          2
-field      acme:client/types.customer.email                         3
-case       acme:client/types.client-error.not-found                 1
-case       acme:client/types.client-error.unauthorized              2
-case       acme:client/types.client-error.disconnected              3
-case       acme:client/types.client-error.network-error             4
-case       acme:client/types.client-error.protocol-error            5
-case       acme:client/types.connection-state.disconnected          1
-case       acme:client/types.connection-state.connecting            2
-case       acme:client/types.connection-state.connected             3
-field      acme:client/types.client-options.endpoint                1
-field      acme:client/types.client-options.api-key                 2
-field      acme:client/types.client-options.request-timeout-ms      3
-field      acme:client/types.command.name                           1
-field      acme:client/types.command.payload                        2
-field      acme:client/types.command-result.name                    1
-field      acme:client/types.command-result.payload                 2
-case       acme:client/types.client-event.customer-updated          1
-case       acme:client/types.client-event.connection-state-changed  2
-case       acme:client/types.client-event.message-received          3
-group      acme:client/api.client                                   0x01
-method     acme:client/api.client.constructor                       0x0100
-method     acme:client/api.client.state                             0x0101
-method     acme:client/api.client.connect                           0x0102
-method     acme:client/api.client.disconnect                        0x0103
-method     acme:client/api.client.get-customer                      0x0104
-method     acme:client/api.client.create-customer                   0x0105
-method     acme:client/api.client.send-command                      0x0106
-method     acme:client/api.client.events                            0x0107
+field      wabi:client/types.customer.id                            1
+field      wabi:client/types.customer.name                          2
+field      wabi:client/types.customer.email                         3
+case       wabi:client/types.client-error.not-found                 1
+case       wabi:client/types.client-error.unauthorized              2
+case       wabi:client/types.client-error.disconnected              3
+case       wabi:client/types.client-error.network-error             4
+case       wabi:client/types.client-error.protocol-error            5
+case       wabi:client/types.connection-state.disconnected          1
+case       wabi:client/types.connection-state.connecting            2
+case       wabi:client/types.connection-state.connected             3
+field      wabi:client/types.client-options.endpoint                1
+field      wabi:client/types.client-options.api-key                 2
+field      wabi:client/types.client-options.request-timeout-ms      3
+field      wabi:client/types.command.name                           1
+field      wabi:client/types.command.payload                        2
+field      wabi:client/types.command-result.name                    1
+field      wabi:client/types.command-result.payload                 2
+case       wabi:client/types.client-event.customer-updated          1
+case       wabi:client/types.client-event.connection-state-changed  2
+case       wabi:client/types.client-event.message-received          3
+group      wabi:client/api.client                                   0x01
+method     wabi:client/api.client.constructor                       0x0100
+method     wabi:client/api.client.state                             0x0101
+method     wabi:client/api.client.connect                           0x0102
+method     wabi:client/api.client.disconnect                        0x0103
+method     wabi:client/api.client.get-customer                      0x0104
+method     wabi:client/api.client.create-customer                   0x0105
+method     wabi:client/api.client.send-command                      0x0106
+method     wabi:client/api.client.events                            0x0107

@@ -79,16 +79,23 @@ func trustListOf(list *tsl.List) (*trustList, error) {
 	return t, nil
 }
 
+// The parsed TSL can be shared, but OCSP trust and in-flight requests belong
+// to one verifier generation. Publish both together to prevent mixed trust.
+type verifierState struct {
+	tsl  *tslSnapshot
+	ocsp *ocspCache
+}
+
 type certificateVerifier struct {
 	productType string
 	http        *http.Client
 	nowFunc     func() time.Time
-	ocsp        *ocspCache
+	metrics     ocspMetrics
 	ocspMaxAge  time.Duration // producedAt window; 0 = gempki's default (37.5 s, as TUC_PKI_006)
 
 	mu       sync.Mutex // serializes TSL changes; readers use the atomic pointer
 	initial  []byte     // constructor TSL, parsed on first use (the constructor cannot fail)
-	snapshot atomic.Pointer[tslSnapshot]
+	snapshot atomic.Pointer[verifierState]
 }
 
 // newCertificateVerifier is the constructor the generated dispatcher calls.
@@ -98,14 +105,13 @@ func newCertificateVerifier(productType string, tslXML []byte) CertificateVerifi
 		initial:     bytes.Clone(tslXML),
 		http:        &http.Client{Timeout: 10 * time.Second},
 		nowFunc:     time.Now,
-		ocsp:        newOCSPCache(),
 	}
 }
 
 func (v *certificateVerifier) Close() {}
 
 // current returns the TSL in use, parsing the constructor's TSL on first use.
-func (v *certificateVerifier) current() (*tslSnapshot, error) {
+func (v *certificateVerifier) current() (*verifierState, error) {
 	if s := v.snapshot.Load(); s != nil {
 		return s, nil
 	}
@@ -118,8 +124,9 @@ func (v *certificateVerifier) current() (*tslSnapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	v.snapshot.Store(s)
-	return s, nil
+	state := &verifierState{tsl: s, ocsp: newOCSPCache(&v.metrics)}
+	v.snapshot.Store(state)
+	return state, nil
 }
 
 func invalidInput(m string) *PkiError { return &PkiError{Tag: PkiErrorInvalidInput, InvalidInput: m} }
@@ -139,11 +146,11 @@ func (v *certificateVerifier) Verify(ctx context.Context, der []byte, profiles [
 	if err != nil {
 		return Admission{}, invalidInput("certificate is not a DER-encoded X.509 certificate: " + err.Error())
 	}
-	c := &tucPki018{productType: v.productType, trust: snap.trust, now: v.nowFunc().UTC()}
+	c := &tucPki018{productType: v.productType, trust: snap.tsl.trust, now: v.nowFunc().UTC()}
 	if withOcsp {
-		c.ocsp = &gempki.OCSPChecker{HTTPClient: v.http, TSLResponders: snap.trust.responders, RequireCertHash: true,
+		c.ocsp = &gempki.OCSPChecker{HTTPClient: v.http, TSLResponders: snap.tsl.trust.responders, RequireCertHash: true,
 			MaxResponseAge: v.ocspMaxAge}
-		c.ocspCache = v.ocsp
+		c.ocspCache = snap.ocsp
 	}
 	profile, failure := c.verify(ctx, cert, profiles)
 	if failure != nil {
@@ -157,7 +164,7 @@ func (v *certificateVerifier) TslInfo() (TslInfo, *PkiError) {
 	if err != nil {
 		return TslInfo{}, invalidInput(err.Error())
 	}
-	return snap.infoAt(v.nowFunc()), nil
+	return snap.tsl.infoAt(v.nowFunc()), nil
 }
 
 func (v *certificateVerifier) SetTsl(raw []byte) (TslInfo, *PkiError) {
@@ -166,7 +173,7 @@ func (v *certificateVerifier) SetTsl(raw []byte) (TslInfo, *PkiError) {
 		return TslInfo{}, invalidInput(err.Error())
 	}
 	v.mu.Lock()
-	v.snapshot.Store(snap)
+	v.snapshot.Store(&verifierState{tsl: snap, ocsp: newOCSPCache(&v.metrics)})
 	v.mu.Unlock()
 	return snap.infoAt(v.nowFunc()), nil
 }
@@ -174,7 +181,7 @@ func (v *certificateVerifier) SetTsl(raw []byte) (TslInfo, *PkiError) {
 func (v *certificateVerifier) RefreshTsl(ctx context.Context, url string) (*[]byte, *PkiError) {
 	current := ""
 	if snap, err := v.current(); err == nil {
-		current = snap.hash
+		current = snap.tsl.hash
 	}
 	raw, err := fetchIfChanged(ctx, v.http, url, current)
 	if err != nil {
@@ -189,4 +196,12 @@ func (v *certificateVerifier) RefreshTsl(ctx context.Context, url string) (*[]by
 	return &raw, nil
 }
 
-func (v *certificateVerifier) CacheStats() CacheStats { return v.ocsp.stats() }
+func (v *certificateVerifier) CacheStats() CacheStats {
+	stats := CacheStats{OcspHits: v.metrics.hits.Load(), OcspMisses: v.metrics.misses.Load()}
+	if state := v.snapshot.Load(); state != nil {
+		state.ocsp.mu.Lock()
+		stats.OcspEntries = uint32(state.ocsp.lru.Len())
+		state.ocsp.mu.Unlock()
+	}
+	return stats
+}

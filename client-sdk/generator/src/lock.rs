@@ -168,14 +168,14 @@ fn parse_id(s: &str) -> Result<u32> {
 }
 
 const HEADER: &str = "\
-# Acme wire-identifier lock file — maintained by acme-wit-gen, commit it.
+# Wabi wire-identifier lock file — maintained by wabi-wit-gen, commit it.
 #
 # Pins every numeric identifier that appears on the native ABI or in a payload
 # (method ids, record field tags, variant/enum case tags). It is APPEND-ONLY:
 #   * new WIT items get the next free number in their scope,
 #   * existing entries are never renumbered, so reordering client.wit is safe,
 #   * removed items stay here as `retired`; their number is never reused,
-#   * `acme-wit-gen --check` (CI) fails if this file would change.
+#   * `wabi-wit-gen --check` (CI) fails if this file would change.
 #
 # kind     qualified-name                                     id
 ";

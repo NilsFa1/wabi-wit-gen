@@ -1,0 +1,24 @@
+{
+  "name": "gematik-zero",
+  "version": "0.1.0",
+  "description": "gematik:zero PoC SDK for Bun (bun:ffi): DPoP proofs built by the native core, signed by the app through host calls.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "module": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@noble/curves": "^1.9.0",
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.6.0"
+  }
+}

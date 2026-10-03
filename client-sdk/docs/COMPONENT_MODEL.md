@@ -1,7 +1,7 @@
 # WebAssembly Component Model — wie es später ergänzt wird
 
 ```
-client.wit ──┬──▶ Acme Native ABI (dieser PoC) ──▶ Rust / Go / Zig Core
+client.wit ──┬──▶ Wabi Native ABI (dieser PoC) ──▶ Rust / Go / Zig Core
              └──▶ Canonical ABI ──▶ client.component.wasm
 ```
 
@@ -16,7 +16,7 @@ Native-spezifisch. Deshalb bleibt der Weg zur Komponente offen.
 |---|---|
 | WIT nutzt nur Component-Model-Konstrukte | ✔ (`world client-sdk { export api; }`) |
 | Rust-Core-Logik ist frei von FFI | ✔ `core-rust/src/api` implementiert den generierten Trait `ClientResource` mit normalem async Rust |
-| SDK-Klassen hängen nur an einer Backend-Schnittstelle | ✔ `IClientBackend` (C#), `ClientBackend` (Java, Swift) — `AcmeClient(options, backend)` |
+| SDK-Klassen hängen nur an einer Backend-Schnittstelle | ✔ `IClientBackend` (C#), `ClientBackend` (Java, Swift) — `WabiClient(options, backend)` |
 | Platzhalter `ComponentModelBackend` | ✔ in C# und Swift (wirft „not implemented“) |
 | Async/Stream-Modell | ✔ Handles für Futures/Streams — dasselbe Denkmodell wie die async Canonical ABI (future/stream-Handles, waitables) |
 
@@ -26,9 +26,9 @@ Die Geschäftslogik (`api/`, `protocol/`, `runtime/`, `crypto/`) bleibt. Es
 ändern sich nur die Ränder:
 
 * **Export-Adapter statt `ffi/`:** `wit-bindgen` (mit async-Support) erzeugt
-  den Guest-Trait für `acme:client/api`. Er entspricht dem heute generierten
+  den Guest-Trait für `wabi:client/api`. Er entspricht dem heute generierten
   `ClientResource`-Trait; die Implementierung ist ein Einzeiler pro Methode
-  auf `Client` bzw. kann von `acme-wit-gen` erzeugt werden.
+  auf `Client` bzw. kann von `wabi-wit-gen` erzeugt werden.
 * **Transport:** `websocket/` bekommt eine zweite Implementierung über
   `wasi:sockets`/`wasi:http` (WASI 0.3) bzw. einen Host-Import; `transport/`
   ist bereits die Abstraktionsgrenze.
@@ -37,7 +37,7 @@ Die Geschäftslogik (`api/`, `protocol/`, `runtime/`, `crypto/`) bleibt. Es
 
 ```
 cargo build --target wasm32-wasip2 --release   # → client.component.wasm
-wasm-tools component wit client.component.wasm # zeigt exakt acme:client/api
+wasm-tools component wit client.component.wasm # zeigt exakt wabi:client/api
 ```
 
 ## Schritt 2: die Komponente von den SDKs aus nutzen
@@ -50,16 +50,16 @@ Ein kleiner nativer Host (Rust + `wasmtime`) exportiert **dieselben 17
 ABI-Funktionen** und leitet generisch weiter:
 
 ```
-acme_call_async(obj, method_id, msgpack)
+wabi_call_async(obj, method_id, msgpack)
    │  method_id ─▶ Funktionsname   (Tabelle aus abi-ids.lock, generiert)
    │  msgpack   ─▶ wasmtime::component::Val (generisch aus dem WIT-Typ)
    ▼
-Component-Aufruf (Canonical ABI) ─▶ Val ─▶ msgpack ─▶ acme_future_take
+Component-Aufruf (Canonical ABI) ─▶ Val ─▶ msgpack ─▶ wabi_future_take
 ```
 
 Die Übersetzung ist tabellengetrieben (WIT-Typen sind zur Laufzeit bekannt),
 also wieder **kein Code pro Methode**. Für C#, Java und Swift ist das nur
-eine andere `libacme_client` — die Compatibility-Matrix
+eine andere `libwabi_client` — die Compatibility-Matrix
 (`tests/compatibility/run.sh`) prüft sie wie jeden anderen Core.
 
 ### B. Direktes Component-Backend (Browser/Node)

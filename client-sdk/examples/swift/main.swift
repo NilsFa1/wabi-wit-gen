@@ -1,10 +1,10 @@
 // Plain application code against the generated Swift SDK. Which core runs
 // underneath (Rust, Go, Zig) is decided by the linked library — not here.
-import AcmeClient
+import WabiClient
 
 let options = ClientOptions(endpoint: CommandLine.arguments.dropFirst().first ?? "mem://example",
                             apiKey: "demo-key", requestTimeoutMs: 5_000)
-let client = AcmeClient(options: options)
+let client = WabiClient(options: options)
 
 let listener = Task {
     for try await event in client.events() {

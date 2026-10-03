@@ -8,8 +8,8 @@
 # C compiler. The library needs no JVM at run time.
 #
 #   1. mvn package                      Java core (+ generated glue + runtime/java-core)
-#   2. native-image --shared            libgematik_pki_image.so (exports only acme_jvm_*/graal_*)
-#   3. cc acme_graal_shim.c             libgematik_pki.so: <prefix>_* ABI symbols -> isolate entry points,
+#   2. native-image --shared            libgematik_pki_image.so (exports only wabi_jvm_*/graal_*)
+#   3. cc wabi_graal_shim.c             libgematik_pki.so: <prefix>_* ABI symbols -> isolate entry points,
 #                                       linked against the image with rpath $ORIGIN
 # (native-image hides every symbol but its own entry points, so the shim is a
 #  separate, tiny library instead of being linked into the image.)
@@ -41,7 +41,7 @@ fi
   --enable-url-protocols=http \
   ${NATIVE_IMAGE_ARGS:-}
 
-cc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared -DACME_PREFIX=$PREFIX -I"$ROOT/abi" \
-  -o "$OUT/lib$PREFIX.so" "$ROOT/runtime/java-core/native/acme_graal_shim.c" \
+cc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared -DWABI_PREFIX=$PREFIX -I"$ROOT/abi" \
+  -o "$OUT/lib$PREFIX.so" "$ROOT/runtime/java-core/native/wabi_graal_shim.c" \
   -L"$OUT" -l${PREFIX}_image -Wl,-rpath,'$ORIGIN' -lpthread
 echo "built $OUT/lib$PREFIX.so (+ lib${PREFIX}_image.so)"

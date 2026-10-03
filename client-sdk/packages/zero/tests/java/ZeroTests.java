@@ -1,13 +1,13 @@
 // The app side of host calls in Java/Android: the app owns the key (here a JDK
 // EC key standing in for the Android Keystore, which returns the same formats:
 // SPKI DER public keys, ASN.1 DER signatures). The Go core (libzero) builds
-// the DPoP proof and asks the app to sign. Runs with -Dacme.binding=panama|jni.
+// the DPoP proof and asks the app to sign. Runs with -Dwabi.binding=panama|jni.
 import com.gematik.zero.DpopSigner;
 import com.gematik.zero.HostKeys;
 import com.gematik.zero.ZeroError;
 import com.gematik.zero.ZeroException;
 import com.gematik.zero.ZeroHost;
-import com.acme.client.runtime.NativeBackend;
+import com.gematik.zero.runtime.NativeBackend;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;

@@ -1,4 +1,4 @@
-//! Acme client core — Rust implementation.
+//! Wabi client core — Rust implementation.
 //!
 //! ```text
 //!   api/        idiomatic async Rust client (the actual logic)
@@ -10,7 +10,7 @@
 //!   mock/       mock backend (tests, examples)
 //!   generated/  types + codec + dispatch, generated from wit/client.wit
 //!
-//! The generic native ABI adapter lives in the `acme-abi-rt` crate (runtime/rust).
+//! The generic native ABI adapter lives in the `wabi-abi-rt` crate (runtime/rust).
 //! ```
 
 pub mod api;
@@ -30,6 +30,6 @@ pub use api::*;
 pub struct Core;
 
 impl generated::Implementation for Core {
-    const CORE_INFO: &'static std::ffi::CStr = c"acme-rust-core/0.1.0 (tokio)";
+    const CORE_INFO: &'static std::ffi::CStr = c"wabi-rust-core/0.1.0 (tokio)";
     type Client = api::Client;
 }

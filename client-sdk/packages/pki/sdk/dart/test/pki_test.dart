@@ -1,6 +1,6 @@
 // The Dart/Flutter app side of gematik:pki: certificate verification with
 // gemLibPki (Java) running as a GraalVM native library — no JVM needed.
-// The core under test is chosen with ACME_NATIVE_LIB, fixtures with PKI_FIXTURES.
+// The core under test is chosen with WABI_NATIVE_LIB, fixtures with PKI_FIXTURES.
 import 'dart:io';
 import 'dart:typed_data';
 

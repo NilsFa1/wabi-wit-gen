@@ -4,7 +4,7 @@
 
 **Status:** geplant, nicht umgesetzt.
 
-Heute ist `acme-wit-gen` vollständig in Rust geschrieben. Das Parsen von WIT
+Heute ist `wabi-wit-gen` vollständig in Rust geschrieben. Das Parsen von WIT
 übernimmt `wit-parser`, die Emitter pro Sprache sind reines String-Templating.
 Eine Aufteilung lohnt sich, sobald
 
@@ -15,7 +15,7 @@ Eine Aufteilung lohnt sich, sobald
 ### Schnitt
 
 ```
-acme-wit-gen (Rust, bleibt klein)            generator-ts (Bun)
+wabi-wit-gen (Rust, bleibt klein)            generator-ts (Bun)
   WIT parsen (wit-parser)                      liest model.json
   IDs aus abi-ids.lock vergeben/prüfen    ──▶  Emitter: C#, Java, Swift, Dart, Rust-Core, TS
   Header gegen ABI-Tabelle prüfen              schreibt generated/*, --check
@@ -32,26 +32,35 @@ acme-wit-gen (Rust, bleibt klein)            generator-ts (Bun)
   `tests/compatibility/run.sh` unverändert grün sein. Erst dann die
   Rust-Emitter entfernen.
 
-## Priorität HOCH (als Nächstes): Flutter-Paketierung über Dart „native assets“
+## Flutter-Paketierung über Dart „native assets“
 
-**Ziel:** Eine Flutter-App trägt nur `acme_client` in die `pubspec.yaml` ein.
-Es gibt keine manuellen Schritte für jniLibs, xcframework, DLL oder dylib mehr
-(heute nötig, siehe `docs/FLUTTER.md`).
+**Status:** umgesetzt; auf Linux verifiziert, die übrigen Plattformen laufen in
+den neuen CI-Jobs (`flutter-android`, `flutter-apple`, `flutter-windows`) und
+sind beim ersten Lauf zu bestätigen.
 
-* `sdk/dart/hook/build.dart` (Dart native assets / `package:hooks`) liefert pro
-  Zielplattform und Architektur die passende `libacme_client` als `CodeAsset`.
-  Quelle: vorgebaute Artefakte aus `scripts/build-native.sh` (CI-Release) oder
-  optional ein lokaler `cargo build`.
-* Das SDK lädt die Bibliothek dann über das Asset (`@Native`/`DynamicLibrary`
-  per Asset-ID) statt per Namens- und Pfadkonvention; `ACME_NATIVE_LIB` bleibt
-  als Override für Tests.
-* Abnahme: eine Beispiel-App (`examples/flutter`) baut und läuft auf Android
-  (arm64 + x86_64-Emulator), iOS-Simulator, macOS, Windows und Linux, und die
-  Dart-Testsuite läuft in CI über `flutter test`.
-* Braucht eine Umgebung mit Flutter-SDK, Android-NDK und Xcode (CI-Runner).
-* Gilt genauso für `gematik:pki`; der Hook sollte vom Generator für jedes
-  WIT-Paket erzeugt werden. Gesamtplan für Pakete und SDK-Repo:
-  [`docs/PACKAGING.md`](PACKAGING.md).
+Eine Flutter-App trägt nur noch das SDK-Paket in die `pubspec.yaml` ein; der
+Build-Hook bündelt die Core-Bibliothek (siehe [`docs/FLUTTER.md`](FLUTTER.md)).
+
+* Generator: `generated/dart/build_hook.dart` je WIT-Paket (Voreinstellungen aus
+  `wabi-gen.conf`: `dart_prebuilt_dir`, `dart_release_url`) und `@Native`-
+  Bindings (`NativeAbi.asset()`); `hook/build.dart` der Pakete `wabi_client`,
+  `gematik_pki` und `gematik_zero` leitet nur weiter.
+* Generische Hook-Logik `generator/runtime/dart/native_assets.dart`: Quellen `library`,
+  `prebuilt_dir`, `release_url` (SHA-256 aus `native/SHA256SUMS`), `required`;
+  Universal-Mach-O wird für Flutter pro Architektur ausgedünnt.
+* Laufzeit: `WABI_NATIVE_LIB` → Code-Asset → Namenskonvention.
+* Build-Skripte legen für iOS zusätzlich dynamische Bibliotheken ab
+  (`ios/`, `ios-simulator/`), weil native assets keine statischen unterstützt.
+* Nachgewiesen (Linux): Hook-Tests für alle Zielplattformen
+  (`sdk/dart/test/build_hook_test.dart`), `dart test` der Pakete ohne
+  `WABI_NATIVE_LIB`, `dart run` des Dart-Beispiels, `flutter test` und
+  `flutter test integration_test -d linux` von `examples/flutter`,
+  `flutter build linux` (Bibliothek in `bundle/lib/`).
+* Offen: erster grüner Lauf der CI-Jobs für Android (APK + x86_64-Emulator),
+  iOS-Simulator, macOS und Windows; die iOS-dylib aus dem Go-Core
+  (`core-go/build.sh ios`, aus dem c-archive gelinkt) ist ungetestet;
+  Veröffentlichen mit `release_url` + `native/SHA256SUMS` gehört zum
+  Paketierungsplan ([`docs/PACKAGING.md`](PACKAGING.md)).
 
 ## Offen: Host-Calls (ABI 1.1) im Zig-Core
 
@@ -61,7 +70,7 @@ Host-Calls funktionieren in allen SDK-Sprachen (C#, Java Panama/JNI, Dart,
 Swift) und in den Cores Go, Rust und C#. Der Zig-Core (`alt-cores/zig`) ist ein
 eager Stub mit ABI 1.0 und kann noch keine Host-Calls auslösen. Dafür braucht es:
 
-* `<prefix>_host_register` / `<prefix>_host_reply` in `acme_core.zig`
+* `<prefix>_host_register` / `<prefix>_host_reply` in `wabi_core.zig`
   (Handler + `user_data` global, offene Calls in einer Tabelle, Request bis zur
   Antwort halten, späte Antworten nach Abbruch akzeptieren),
 * echte asynchrone Futures (heute sind Futures „born complete“): ein Host-Call
@@ -71,14 +80,25 @@ eager Stub mit ABI 1.0 und kann noch keine Host-Calls auslösen. Dafür braucht 
 
 ## Erledigt
 
-* ~~Android/Java: generisches JNI-Backend~~ → `runtime/java/JniAbi.java` +
-  `runtime/java/jni/acme_jni.c`; Android-Jar mit Java-17-Bytecode; in der
+* ~~TypeScript-SDK~~ → für **Bun**: `generator/src/gen_ts.rs` (Target `ts`) +
+  `generator/runtime/ts` (bun:ffi, threadsafe `JSCallback`s, Structs per Wert je nach
+  Aufrufkonvention); Paket `packages/zero/sdk/ts` (inkl. Host-Calls), getestet auf
+  Linux, macOS arm64 und Windows. Offen: Browser (Core als WebAssembly), Node
+  (bräuchte N-API statt bun:ffi).
+
+* ~~Android/Java: generisches JNI-Backend~~ → `JniAbi.java` +
+  `jni/wabi_jni.c` (heute in `generator/runtime/java`); Android-Jar mit Java-17-Bytecode; in der
   Kompatibilitätsmatrix gegen alle Cores getestet.
+* ~~C#-Core-Emitter~~ → `generator/src/gen_csharp_core.rs` (Target
+  `csharp-core`, `csharp_core_out`): Interfaces pro Ressource, `ICore`,
+  Dispatcher, Import-Clients für Host-Calls, Symbol-Präfix/Contract-ID.
+  `alt-cores/csharp` und `packages/zero/core-csharp` enthalten nur noch
+  Geschäftslogik; getestet mit C-Konformität, C#- und Dart-SDK, Host-Calls.
 * ~~Go-Emitter für den Core-seitigen Dispatch~~ → `generator/src/gen_go.rs` +
   `runtime/go`; `alt-cores/go` enthält nur noch Geschäftslogik.
 * ~~Host-Calls (ABI 1.1): der Core ruft die App~~ → SDKs: C#, Java (Panama,
   JNI), Dart, Swift; Cores: Go (`runtime/go`), Rust (`runtime/rust`,
-  Crate `acme-abi-rt`), C# (`runtime/csharp-core`). Beispiel: `packages/zero`
+  Crate `wabi-abi-rt`), C# (`runtime/csharp-core`). Beispiel: `packages/zero`
   mit drei austauschbaren Cores (Go mit gematik libzero, Rust, C#).
 
 ## Java-Cores (GraalVM native-image)
@@ -117,7 +137,6 @@ nur ECC; Builds für Linux/Windows/macOS/Android/iOS. Offen:
 
 * Host-Calls: Abbruch in Richtung App (die App erfährt heute nicht, dass ein
   offener Host-Call aufgegeben wurde), Streams/Ressourcen als Parameter.
-* C#-Core-Emitter (heute ist die Dispatch-Tabelle der C#-Cores handgeschrieben).
 * Swift lokal nicht kompiliert (nur macOS-CI).
 * `wss://` im Rust-Core (tokio-tungstenite mit `rustls-tls-webpki-roots`).
 * Optionaler `Unknown`-Case für Variants zur Vorwärtskompatibilität.

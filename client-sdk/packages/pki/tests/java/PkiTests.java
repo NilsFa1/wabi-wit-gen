@@ -1,6 +1,6 @@
 // The Java/Android app side of gematik:pki: certificate verification with
 // gemLibPki running as a GraalVM native library (Panama or JNI binding).
-import com.acme.client.runtime.NativeBackend;
+import com.gematik.pki.runtime.NativeBackend;
 import com.gematik.pki.CertificateProfile;
 import com.gematik.pki.CertificateVerifier;
 import com.gematik.pki.PkiError;

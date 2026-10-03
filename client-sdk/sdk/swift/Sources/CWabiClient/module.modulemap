@@ -1,0 +1,5 @@
+module CWabiClient [system] {
+    header "shim.h"
+    link "wabi_client"
+    export *
+}

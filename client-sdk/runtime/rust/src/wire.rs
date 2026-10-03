@@ -357,7 +357,7 @@ impl<'a> Reader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use super::{Reader, Writer};
 
     #[test]
     fn roundtrip_scalars() {

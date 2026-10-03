@@ -114,7 +114,7 @@ pub struct HostInterface {
 }
 
 impl Model {
-    /// Host calls need ABI 1.1 + ACME_CAP_HOST_CALLS; everything else runs on 1.0.
+    /// Host calls need ABI 1.1 + WABI_CAP_HOST_CALLS; everything else runs on 1.0.
     pub fn needs_host_calls(&self) -> bool {
         !self.imports.is_empty()
     }
@@ -124,13 +124,13 @@ impl Model {
         if self.needs_host_calls() { 1 } else { 0 }
     }
 
-    /// `acme:client@1.0.0`
+    /// `wabi:client@1.0.0`
     pub fn contract_id(&self) -> String {
         format!("{}:{}@{}", self.namespace, self.package, self.version)
     }
 
     /// Symbol prefix of this package's ABI exports and library name:
-    /// `acme:client` -> `acme_client` (`acme_client_call_sync`, `libacme_client.so`).
+    /// `wabi:client` -> `wabi_client` (`wabi_client_call_sync`, `libwabi_client.so`).
     /// Unique per WIT package, so several packages can share one process/binary.
     pub fn symbol_prefix(&self) -> String {
         format!("{}_{}", crate::names::snake(&self.namespace), crate::names::snake(&self.package))
@@ -170,6 +170,7 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
     }
 
     let mut error_types = vec![];
+    let mut resource_indices = std::collections::HashMap::new();
 
     for (iface_name, &iid) in &package.interfaces {
         let iface = &resolve.interfaces[iid];
@@ -221,6 +222,7 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
                 ),
                 TypeDefKind::Resource => {
                     let group = lock.group(&q(tname));
+                    resource_indices.insert(tid, model.resources.len());
                     model.resources.push(Resource {
                         name: tname.clone(),
                         group,
@@ -268,11 +270,9 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
             let rname = resource_name(resolve, rid, iid)?;
             let item = func.item_name().to_string();
             let qname = q(&format!("{rname}.{item}"));
-            let res = model
-                .resources
-                .iter_mut()
-                .find(|r| r.name == rname)
-                .expect("resource declared before its functions");
+            let index = *resource_indices.get(&rid)
+                .ok_or_else(|| anyhow::anyhow!("resource {rname} has no declaration in this interface"))?;
+            let res = &mut model.resources[index];
             let is_ctor = matches!(func.kind, FunctionKind::Constructor(_));
             let is_method = matches!(func.kind, FunctionKind::Method(_) | FunctionKind::AsyncMethod(_));
             let id = lock.method(res.group, &qname, is_ctor)?;
@@ -310,6 +310,7 @@ pub fn build(resolve: &Resolve, pkg: wit_parser::PackageId, lock: &mut Lock) -> 
     for t in &mut model.types {
         t.is_error = error_types.contains(&t.name);
     }
+    validate_names(&model)?;
     lock.retire_untouched();
     Ok(model)
 }
@@ -392,4 +393,72 @@ fn ty(resolve: &Resolve, t: &Type) -> Result<Ty> {
             }
         }
     })
+}
+
+fn validate_names(m: &Model) -> Result<()> {
+    use crate::names::{camel, exception_name, pascal, snake};
+    use std::collections::HashMap;
+
+    fn unique<'a>(scope: &str, names: impl IntoIterator<Item = &'a str>) -> Result<()> {
+        let names: Vec<_> = names.into_iter().collect();
+        for convert in [pascal as fn(&str) -> String, camel, snake] {
+            let mut seen = HashMap::new();
+            for &name in &names {
+                let target = convert(name);
+                if let Some(previous) = seen.insert(target.clone(), name) {
+                    bail!("name collision in {scope}: {previous} and {name} both generate {target}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // Emitters flatten WIT interfaces into one package. Reject collisions
+    // before any output is written instead of binding by an unqualified name.
+    let mut seen = HashMap::new();
+    let mut insert = |name: String, source: String| -> Result<()> {
+        if let Some(previous) = seen.insert(name.clone(), source.clone()) {
+            bail!("generated type name collision: {previous} and {source} both generate {name}");
+        }
+        Ok(())
+    };
+    for t in &m.types { insert(pascal(&t.name), format!("type {}", t.name))?; }
+    for r in &m.resources {
+        insert(pascal(&r.name), format!("resource {}", r.name))?;
+        let sdk = crate::gen_csharp::class_name(m, r);
+        if sdk != pascal(&r.name) { insert(sdk, format!("SDK resource {}", r.name))?; }
+    }
+    for h in &m.imports { insert(pascal(&h.name), format!("host interface {}", h.name))?; }
+    for t in &m.types {
+        if t.is_error { insert(exception_name(&t.name), format!("error wrapper {}", t.name))?; }
+    }
+    for name in ["WireCodec", "MethodIds", "Contract", "NativeAbi", "AbiConstants"] {
+        insert(name.to_owned(), "generated support type".to_owned())?;
+    }
+    if !m.imports.is_empty() { insert(format!("{}Host", pascal(&m.package)), "host dispatcher".to_owned())?; }
+
+    for t in &m.types {
+        match &t.kind {
+            TypeKind::Record(fields) => unique(&t.name, fields.iter().map(|f| f.name.as_str()))?,
+            TypeKind::Variant(cases) | TypeKind::Enum(cases) => unique(&t.name, cases.iter().map(|c| c.name.as_str()))?,
+        }
+    }
+    for r in &m.resources {
+        let methods: Vec<_> = r.methods.iter().map(|f| f.name.as_str()).collect();
+        unique(&r.name, methods.iter().copied())?;
+        // C#/Java add Async to asynchronous methods.
+        let mut seen = HashMap::new();
+        for f in &r.methods {
+            let target = format!("{}{}", pascal(&f.name), if f.is_async { "Async" } else { "" });
+            if let Some(old) = seen.insert(target.clone(), &f.name) {
+                bail!("method name collision in {}: {old} and {} generate {target}", r.name, f.name);
+            }
+        }
+    }
+    for h in &m.imports { unique(&h.name, h.funcs.iter().map(|f| f.name.as_str()))?; }
+    for f in m.resources.iter().flat_map(|r| r.ctor.iter().chain(&r.methods))
+        .chain(m.imports.iter().flat_map(|h| &h.funcs)) {
+        unique(&f.name, f.params.iter().map(|(name, _)| name.as_str()))?;
+    }
+    Ok(())
 }

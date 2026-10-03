@@ -2,9 +2,9 @@
 //!
 //! Handles are `kind << 56 | serial`. The serial comes from a monotonically
 //! increasing counter and is never reused, so a stale or double-dropped handle
-//! is always *detected* (ACME_ERR_INVALID_HANDLE) instead of aliasing a newer
+//! is always *detected* (WABI_ERR_INVALID_HANDLE) instead of aliasing a newer
 //! object. The kind byte only exists to make handles readable in logs and to
-//! reject e.g. a future handle passed to acme_stream_next; hosts must treat
+//! reject e.g. a future handle passed to wabi_stream_next; hosts must treat
 //! handles as opaque.
 
 use crate::future::FutureSlot;

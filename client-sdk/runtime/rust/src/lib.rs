@@ -1,10 +1,10 @@
 //! Hand-written, contract-agnostic runtime for Rust cores implementing the
-//! Acme native ABI (abi/acme_abi.h, ABI.md). The Rust counterpart of
+//! Wabi native ABI (abi/wabi_abi.h, ABI.md). The Rust counterpart of
 //! `runtime/go`. A Rust core consists of
 //!
 //!   * this crate: handles, futures, streams, payload codec, host calls and
 //!     the generic implementation of every ABI function,
-//!   * the generated module (acme-wit-gen `rust` target): contract types,
+//!   * the generated module (wabi-wit-gen `rust` target): contract types,
 //!     codec, one trait per resource, host-call stubs for WIT imports, the
 //!     method-id dispatcher and the `#[export_name]` wrappers under the
 //!     package symbol prefix,
@@ -36,11 +36,11 @@ use std::ffi::CStr;
 /// One WIT package as seen by the generic exports. Implemented by the
 /// generated code; the core only implements the generated traits.
 pub trait Package: 'static {
-    /// `acme:client@1.0.0`
+    /// `wabi:client@1.0.0`
     const CONTRACT_ID: &'static CStr;
     /// Free text identifying the core implementation.
     const CORE_INFO: &'static CStr;
-    /// The package has WIT imports: advertise ACME_CAP_HOST_CALLS.
+    /// The package has WIT imports: advertise WABI_CAP_HOST_CALLS.
     const HOST_CALLS: bool;
 
     fn dispatch_sync(object: Option<ObjectRef>, method_id: u32, request: &[u8]) -> Result<Vec<u8>, AbiError>;

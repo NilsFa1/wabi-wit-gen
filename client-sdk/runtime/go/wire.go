@@ -1,4 +1,4 @@
-package acmeabi
+package wabiabi
 
 // Payload encoding v1 (ABI.md §5): the MessagePack subset every SDK runtime
 // and every core implements. The Reader has a sticky error so generated

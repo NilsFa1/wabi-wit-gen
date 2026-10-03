@@ -1,7 +1,7 @@
-module acme.example/gocore
+module wabi.example/gocore
 
 go 1.22
 
-require acme.example/acmeabi v0.0.0
+require wabi.example/wabiabi v0.0.0
 
-replace acme.example/acmeabi => ../../runtime/go
+replace wabi.example/wabiabi => ../../runtime/go

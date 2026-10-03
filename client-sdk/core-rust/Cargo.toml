@@ -1,17 +1,18 @@
 [package]
-name = "acme-client-core"
+name = "wabi-client-core"
 version = "0.1.0"
 edition = "2021"
-description = "Acme client core (Rust implementation of the Acme native ABI v1)"
+license = "Apache-2.0"
+description = "Wabi client core (Rust implementation of the Wabi native ABI v1)"
 publish = false
 
 [lib]
-# libacme_client.so / libacme_client.dylib / acme_client.dll (+ .a for iOS xcframework)
-name = "acme_client"
+# libwabi_client.so / libwabi_client.dylib / wabi_client.dll (+ .a for iOS xcframework)
+name = "wabi_client"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
-name = "acme-mock-server"
+name = "wabi-mock-server"
 path = "src/bin/mock_server.rs"
 
 [features]
@@ -21,7 +22,7 @@ mock-backend = []
 
 [dependencies]
 # Contract-agnostic ABI runtime (handles, futures, streams, codec, host calls, exports)
-acme-abi-rt = { path = "../runtime/rust" }
+wabi-abi-rt = { path = "../runtime/rust" }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "net"] }
 tokio-util = "0.7"
 tokio-stream = { version = "0.1", features = ["sync"] }

@@ -1,6 +1,6 @@
 //! Tests of the idiomatic Rust API — no FFI involved.
 
-use acme_client::*;
+use wabi_client::*;
 use futures::StreamExt;
 use std::time::Duration;
 
@@ -80,8 +80,8 @@ async fn real_websocket_end_to_end() {
         loop {
             let (tcp, _) = listener.accept().await.unwrap();
             tokio::spawn(async move {
-                let t = acme_client::websocket::accept(tcp).await.unwrap();
-                acme_client::mock::serve(t, Default::default()).await;
+                let t = wabi_client::websocket::accept(tcp).await.unwrap();
+                wabi_client::mock::serve(t, Default::default()).await;
             });
         }
     });

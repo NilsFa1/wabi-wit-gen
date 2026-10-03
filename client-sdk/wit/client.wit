@@ -1,18 +1,18 @@
-/// Public, long-term stable contract of the Acme client SDK.
+/// Public, long-term stable contract of the Wabi client SDK.
 ///
 /// This file is the single source of truth. Everything else is derived from it:
 ///   * the numeric wire identifiers (pinned in `abi-ids.lock`, never by order),
 ///   * the C#, Java and Swift SDK surface,
 ///   * the dispatch/codec layer of every native core (Rust today, Go/Zig later),
 ///   * optionally a WebAssembly component (`client.component.wasm`) that uses the
-///     standard Canonical ABI instead of the Acme native ABI.
+///     standard Canonical ABI instead of the Wabi native ABI.
 ///
-/// Evolution rules (enforced by `acme-wit-gen --check`):
+/// Evolution rules (enforced by `wabi-wit-gen --check`):
 ///   * never rename or remove a published function, field or case — deprecate it,
 ///   * new record fields must be `option<T>` (old peers simply do not send them),
 ///   * new variant/enum cases are allowed; old SDKs surface them as protocol errors,
 ///   * reordering anything in this file is always safe (IDs come from the lock file).
-package acme:client@1.0.0;
+package wabi:client@1.0.0;
 
 interface types {
     /// A customer as returned by the backend.

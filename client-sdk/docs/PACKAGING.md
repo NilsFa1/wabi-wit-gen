@@ -21,7 +21,7 @@ ohne manuelles Kopieren nativer Bibliotheken:
 
 ```
 UniWtiGen (dieses Monorepo, bleibt die Quelle)     <prefix>-pki-sdk (neues Repo, nur Auslieferung)
-  generator/            acme-wit-gen                   Package.swift              (SwiftPM, im Root)
+  generator/            wabi-wit-gen                   Package.swift              (SwiftPM, im Root)
   abi/, runtime/*       ABI + Runtimes     ── Export ─▶ dotnet/                    (NuGet-Projekt)
   packages/pki/wit      Vertrag (WIT)                  java/, android/            (Maven JAR, AAR)
   packages/pki/core-go  Go-Core (EUPL)                 dart/                      (pub-Paket, native assets)
@@ -48,10 +48,10 @@ UniWtiGen (dieses Monorepo, bleibt die Quelle)     <prefix>-pki-sdk (neues Repo,
 | Paket | Inhalt | Native Bibliothek | Noch zu tun |
 |---|---|---|---|
 | **NuGet** `<Prefix>.Pki` | generiertes C#-SDK + C#-Runtime (net8.0) | `runtimes/{linux-x64,linux-arm64,win-x64,osx-arm64,osx-x64,android-arm64,android-x64}/native/` | iOS (MAUI): `NativeReference` auf das xcframework und `DllImport("__Internal")` im Loader |
-| **Maven** `<group>:pki` | Java-SDK (Panama, JDK 22+) | als Ressourcen im JAR (`native/<os>-<arch>/`), beim Start in ein Temp-Verzeichnis entpackt | Entpack-Lader in `runtime/java` (heute: Pfad per `ACME_NATIVE_LIB`/`java.library.path`) |
-| **AAR** `<group>:pki-android` | Java-SDK mit JNI-Binding | `jniLibs/{arm64-v8a,x86_64}/libgematik_pki.so` + `libacme_jni.so` | Gradle-Build fürs AAR; `libacme_jni.so` per NDK für beide ABIs bauen |
+| **Maven** `<group>:pki` | Java-SDK (Panama, JDK 22+) | als Ressourcen im JAR (`native/<os>-<arch>/`), beim Start in ein Temp-Verzeichnis entpackt | Entpack-Lader in `generator/runtime/java` (heute: Pfad per `WABI_NATIVE_LIB`/`java.library.path`) |
+| **AAR** `<group>:pki-android` | Java-SDK mit JNI-Binding | `jniLibs/{arm64-v8a,x86_64}/libgematik_pki.so` + `libgematik_pki_jni.so` | Gradle-Build fürs AAR; `libgematik_pki_jni.so` per NDK (`generated/java/jni/CMakeLists.txt`) für beide ABIs bauen |
 | **SwiftPM** | Swift-SDK + Swift-Runtime | `binaryTarget(url:checksum:)` auf `GematikPki.xcframework.zip` im GitHub-Release | macOS-Slices ins xcframework aufnehmen (heute nur iOS + Simulator) |
-| **pub.dev** `pki` | Dart-SDK + Dart-Runtime | über **Dart native assets** (`hook/build.dart`): lädt pro Plattform die passende Bibliothek aus dem GitHub-Release (Prüfsumme im Paket) | siehe unten „Flutter“ |
+| **pub.dev** `pki` | Dart-SDK + Dart-Runtime | über **Dart native assets** (`hook/build.dart`): lädt pro Plattform die passende Bibliothek aus dem GitHub-Release (Prüfsumme im Paket) | Hook fertig; im Export `dart_release_url` setzen und `native/SHA256SUMS` erzeugen |
 
 Die nativen Bibliotheken kommen ausschließlich aus dem Go-Core (`pki-go`):
 Linux x64/arm64 (`.so`), Windows x64 (`.dll`), macOS universal (`.dylib`),
@@ -60,18 +60,16 @@ Der Java-Core wird nicht ausgeliefert (siehe `packages/pki/core-java/README.md`)
 
 ### Flutter
 
-Die Flutter-Paketierung über Dart native assets steht in `docs/ROADMAP.md`
-(„Priorität HOCH“) bisher für `acme_client`. Für pki gilt dasselbe:
+Umgesetzt (siehe [`docs/FLUTTER.md`](FLUTTER.md) und `docs/ROADMAP.md`): Der
+Generator erzeugt den Hook für jedes WIT-Paket, `gematik_pki` hat
+`hook/build.dart`. Für das veröffentlichte Paket fehlt nur noch im Export:
 
-* `hook/build.dart` liefert pro Zielplattform die Bibliothek als `CodeAsset`
-  (Quelle: Release-Artefakte mit Prüfsumme; `ACME_NATIVE_LIB` bleibt Override).
-* Der Hook sollte vom Generator mit erzeugt werden (ein Template für alle
-  WIT-Pakete), statt pro Paket von Hand gepflegt.
-* Abnahme: Beispiel-App baut und läuft auf Android (arm64 + x86_64-Emulator),
-  iOS-Simulator, macOS, Windows und Linux; `flutter test` in CI.
-* Übergangslösung, falls native assets auf einer Zielplattform noch nicht
-  reichen: klassisches FFI-Plugin (`ffiPlugin: true`) mit Podspec (xcframework)
-  und CMake (Linux/Windows).
+* `dart_release_url` in `packages/pki/wabi-gen.conf` (bzw. per Export) auf den
+  GitHub-Release setzen,
+* `native/SHA256SUMS` (Ausgabe von `sha256sum` über die Release-Artefakte im
+  Layout `<ziel>/<datei>`, z. B. `android/jniLibs/arm64-v8a/libgematik_pki.so`,
+  `ios/libgematik_pki.dylib`) ins Dart-Paket legen,
+* Abnahme wie gehabt: Beispiel-App auf allen Plattformen, `flutter test` in CI.
 
 ## Versionierung
 
@@ -136,6 +134,6 @@ werden sie nur als Secrets referenziert.
 | 1 | Export-Skript + SDK-Repo-Gerüst + Release mit Assets (ohne Veröffentlichen) | ~2 Tage |
 | 2 | Loader-Anpassungen: Java-Entpacken, C# iOS `__Internal`, macOS-Slices im xcframework | ~1 Tag |
 | 3 | Veröffentlichen auf GitHub Packages (NuGet, Maven) + SwiftPM-Tags | ~1 Tag |
-| 4 | Flutter über native assets, generierter Hook, Beispiel-App auf allen Plattformen | ~2–3 Tage |
+| 4 | Flutter über native assets: Hook + Beispiel-App erledigt; Release-URL + Prüfsummen im Export | ~0,5 Tage |
 | 5 | Smoke-Tests auf Android-Emulator, iOS-Simulator, Windows in CI | ~1 Tag |
 | 6 | Öffentliche Registries (nuget.org, Maven Central, pub.dev) | ~1 Tag + Konten |

@@ -4,10 +4,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:acme_client/acme_client.dart';
+import 'package:wabi_client/wabi_client.dart';
 
 Future<void> main(List<String> args) async {
-  final client = AcmeClient(ClientOptions(
+  final client = WabiClient(ClientOptions(
     endpoint: args.isNotEmpty ? args.first : 'mem://example',
     apiKey: 'demo-key',
     requestTimeoutMs: 5000,

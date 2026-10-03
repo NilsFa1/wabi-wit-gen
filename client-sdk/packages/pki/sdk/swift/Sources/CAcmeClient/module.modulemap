@@ -1,5 +1,0 @@
-module CAcmeClient [system] {
-    header "shim.h"
-    link "gematik_pki"
-    export *
-}

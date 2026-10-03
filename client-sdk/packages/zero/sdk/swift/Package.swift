@@ -1,5 +1,5 @@
 // swift-tools-version:5.9
-// gematik:zero PoC Swift SDK = shared runtime (Sources/GematikZero/Runtime -> runtime/swift)
+// gematik:zero PoC Swift SDK = runtime written by wabi-wit-gen (Sources/GematikZero/Generated/Runtime)
 //                            + generated code (Sources/GematikZero/Generated -> packages/zero/generated/swift)
 // linked against the Go core (libgematik_zero, libzero inside).
 //
@@ -14,8 +14,8 @@ let package = Package(
         .library(name: "GematikZero", targets: ["GematikZero"]),
     ],
     targets: [
-        .systemLibrary(name: "CAcmeClient", path: "Sources/CAcmeClient"),
-        .target(name: "GematikZero", dependencies: ["CAcmeClient"], path: "Sources/GematikZero"),
+        .systemLibrary(name: "CGematikZero", path: "Sources/CGematikZero"),
+        .target(name: "GematikZero", dependencies: ["CGematikZero"], path: "Sources/GematikZero"),
         .testTarget(name: "GematikZeroTests", dependencies: ["GematikZero"], path: "Tests/GematikZeroTests"),
     ]
 )

@@ -1,8 +1,9 @@
 [package]
-name = "acme-abi-rt"
+name = "wabi-abi-rt"
 version = "0.1.0"
 edition = "2021"
-description = "Contract-agnostic runtime for Rust cores implementing the Acme native ABI (abi/acme_abi.h)"
+license = "Apache-2.0"
+description = "Contract-agnostic runtime for Rust cores implementing the Wabi native ABI (abi/wabi_abi.h)"
 publish = false
 
 [dependencies]

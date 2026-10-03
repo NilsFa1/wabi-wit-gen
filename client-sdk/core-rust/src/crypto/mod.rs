@@ -6,7 +6,7 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
-const DOMAIN: &[u8] = b"acme-auth-v1:";
+const DOMAIN: &[u8] = b"wabi-auth-v1:";
 
 fn mac(key: &str, nonce: &str) -> HmacSha256 {
     let mut m = HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC accepts any key length");
@@ -15,7 +15,7 @@ fn mac(key: &str, nonce: &str) -> HmacSha256 {
     m
 }
 
-/// Hex-encoded HMAC-SHA256(key, "acme-auth-v1:" || nonce).
+/// Hex-encoded HMAC-SHA256(key, "wabi-auth-v1:" || nonce).
 pub fn sign(key: &str, nonce: &str) -> String {
     hex(&mac(key, nonce).finalize().into_bytes())
 }

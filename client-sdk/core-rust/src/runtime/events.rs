@@ -1,4 +1,4 @@
-use acme_abi_rt::host::AbiStream;
+use wabi_abi_rt::host::AbiStream;
 use crate::generated::ClientEvent;
 use futures::StreamExt;
 use std::sync::Mutex;

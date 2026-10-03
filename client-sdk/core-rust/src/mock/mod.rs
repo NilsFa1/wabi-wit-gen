@@ -1,6 +1,6 @@
-//! A tiny mock of the Acme backend, speaking the real backend protocol.
+//! A tiny mock of the Wabi backend, speaking the real backend protocol.
 //! Served in-process for `mem://` endpoints and over TCP by the
-//! `acme-mock-server` binary (for real WebSocket end-to-end tests).
+//! `wabi-mock-server` binary (for real WebSocket end-to-end tests).
 //!
 //! Behaviour that the cross-language test suites rely on:
 //!   * API key `demo-key` (HMAC challenge/response), anything else -> unauthorized

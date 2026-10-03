@@ -22,8 +22,8 @@ quiet() { grep -v -e JAVA_TOOL -e SLF4J; }
 java -Dstdout.encoding=UTF-8 -cp "$B/bench/jvm:$CP" JvmDirect 2>&1 | quiet
 [ -n "${GRAALVM_HOME:-}" ] && "$GRAALVM_HOME/bin/java" -Dstdout.encoding=UTF-8 -cp "$B/bench/jvm:$CP" JvmDirect 2>&1 | quiet
 for binding in panama jni; do
-  ACME_NATIVE_LIB="$LIB" java -Dstdout.encoding=UTF-8 -Dacme.binding=$binding -Dacme.jni.lib="$J/libacme_jni.so" \
+  WABI_NATIVE_LIB="$LIB" java -Dstdout.encoding=UTF-8 -Dwabi.binding=$binding -Dcom.gematik.pki.runtime.jniLib="$J/libgematik_pki_jni.so" \
     --enable-native-access=ALL-UNNAMED -cp "$J/gematik-pki.jar:$B/bench/sdk" SdkJava 2>&1 | quiet
 done
-ACME_NATIVE_LIB="$LIB" dotnet run --project csharp -c Release 2>&1 | quiet
+WABI_NATIVE_LIB="$LIB" dotnet run --project csharp -c Release 2>&1 | quiet
 "$B/bench/abi_roundtrip" pki "$LIB" "$PKI_FIXTURES/tsl.xml" 2>&1 | quiet

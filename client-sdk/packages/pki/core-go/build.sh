@@ -7,7 +7,8 @@
 #                                              -> android/jniLibs/{arm64-v8a,x86_64}/libgematik_pki.so
 #   macos                                      on macOS: universal (arm64 + x86_64) libgematik_pki.dylib
 #   ios                                        on macOS: GematikPki.xcframework (device + simulator,
-#                                              static library, as the App Store expects)
+#                                              static library, for Swift/Xcode) plus dynamic libraries
+#                                              ios/ and ios-simulator/ for Dart native assets (Flutter)
 #
 # Every library is checked for the ABI entry points (gematik_pki_*).
 set -euo pipefail
@@ -64,7 +65,7 @@ case "$TARGET" in
     check nm -gU "$OUT/lib$PREFIX.dylib" ;;
   ios)
     W="$OUT/work"; mkdir -p "$W/device" "$W/sim" "$W/headers"
-    cp "$ROOT/abi/acme_abi.h" "$HERE/../generated/c/$PREFIX.h" "$W/headers/"
+    cp "$ROOT/abi/wabi_abi.h" "$HERE/../generated/c/$PREFIX.h" "$W/headers/"
     sdk() { xcrun -sdk "$1" --show-sdk-path; }
     echo "== iOS device arm64"
     CC=clang CGO_CFLAGS="-arch arm64 -miphoneos-version-min=13.0 -isysroot $(sdk iphoneos)" \
@@ -84,6 +85,18 @@ case "$TARGET" in
       -library "$W/sim/lib$PREFIX.a" -headers "$W/headers" \
       -output "$OUT/GematikPki.xcframework"
     check nm -gU "$W/device/lib$PREFIX.a"
+    # Dart native assets (Flutter) bundle a dynamic library: link the same archives into
+    # ios/lib$PREFIX.dylib (device) and ios-simulator/lib$PREFIX.dylib (arm64 + x86_64).
+    SIM_OUT="$(dirname "$OUT")/ios-simulator"; mkdir -p "$SIM_OUT"
+    dylib() { # output archive clang-flags...
+      clang -dynamiclib "${@:3}" -Wl,-all_load "$2" -framework CoreFoundation -framework Security -lresolv \
+        -install_name "@rpath/lib$PREFIX.dylib" -o "$1"
+    }
+    dylib "$OUT/lib$PREFIX.dylib" "$W/device/lib$PREFIX.a" -arch arm64 -miphoneos-version-min=13.0 -isysroot "$(sdk iphoneos)"
+    dylib "$SIM_OUT/lib$PREFIX.dylib" "$W/sim/lib$PREFIX.a" -arch arm64 -arch x86_64 -mios-simulator-version-min=13.0 \
+      -isysroot "$(sdk iphonesimulator)"
+    check nm -gU "$OUT/lib$PREFIX.dylib"
+    check nm -gU "$SIM_OUT/lib$PREFIX.dylib"
     rm -rf "$W" ;;
   *) echo "unknown target $TARGET" >&2; exit 2 ;;
 esac

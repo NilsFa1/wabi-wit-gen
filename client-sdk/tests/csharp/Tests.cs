@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
-using Acme.Client;
-using Acme.Client.Runtime;
+using Wabi.Client;
+using Wabi.Client.Runtime;
 
-namespace Acme.Client.Tests;
+namespace Wabi.Client.Tests;
 
 [AttributeUsage(AttributeTargets.Method)]
 sealed class TestAttribute(bool needsFullCore = true) : Attribute
@@ -41,9 +41,9 @@ public static class Program
     static ClientOptions Options(string key = "demo-key", string endpoint = "mem://csharp-tests") =>
         new(endpoint, key, RequestTimeoutMs: 10_000);
 
-    static async Task<AcmeClient> Connected()
+    static async Task<WabiClient> Connected()
     {
-        var c = new AcmeClient(Options());
+        var c = new WabiClient(Options());
         await c.ConnectAsync();
         return c;
     }
@@ -53,7 +53,7 @@ public static class Program
     [Test(needsFullCore: false)]
     static Task SyncCall()
     {
-        using var c = new AcmeClient(Options());
+        using var c = new WabiClient(Options());
         Assert.Equal(ConnectionState.Disconnected, c.State());
         return Task.CompletedTask;
     }
@@ -76,15 +76,15 @@ public static class Program
         var e = await Assert.ThrowsAsync<ClientException>(() => c.GetCustomerAsync("does-not-exist"));
         Assert.True(e.Error is ClientError.NotFound, "not-found");
 
-        using var bad = new AcmeClient(Options(key: "wrong-key"));
+        using var bad = new WabiClient(Options(key: "wrong-key"));
         e = await Assert.ThrowsAsync<ClientException>(() => bad.ConnectAsync());
         Assert.True(e.Error is ClientError.Unauthorized, "unauthorized");
 
-        using var offline = new AcmeClient(Options(endpoint: "mem://unreachable"));
+        using var offline = new WabiClient(Options(endpoint: "mem://unreachable"));
         e = await Assert.ThrowsAsync<ClientException>(() => offline.ConnectAsync());
         Assert.True(e.Error is ClientError.NetworkError { Value: var msg } && msg.Length > 0, "network-error");
 
-        using var notConnected = new AcmeClient(Options());
+        using var notConnected = new WabiClient(Options());
         e = await Assert.ThrowsAsync<ClientException>(() => notConnected.GetCustomerAsync("4711"));
         Assert.True(e.Error is ClientError.Disconnected, "disconnected");
     }
@@ -157,7 +157,7 @@ public static class Program
         Assert.Throws<ObjectDisposedException>(() => c.State());
         await Assert.ThrowsAsync<ObjectDisposedException>(() => c.GetCustomerAsync("4711"));
         // Finalizer path: an undisposed client is released by the GC without crashing.
-        for (int i = 0; i < 50; i++) _ = new AcmeClient(Options());
+        for (int i = 0; i < 50; i++) _ = new WabiClient(Options());
         GC.Collect();
         GC.WaitForPendingFinalizers();
     }
@@ -165,7 +165,7 @@ public static class Program
     [Test(needsFullCore: false)]
     static Task DoubleDrop()
     {
-        var c = new AcmeClient(Options());
+        var c = new WabiClient(Options());
         c.Dispose();
         c.Dispose(); // SDK level: idempotent
         // ABI level: the core detects the second drop instead of corrupting memory.
@@ -174,11 +174,11 @@ public static class Program
         bytes.WriteArrayHeader(1);
         WireCodec.WriteClientOptions(bytes, Options());
         var handle = new MsgPackReader(backend.CallSync(0, MethodIds.ClientConstructor, bytes.ToArray())).ReadUInt64();
-        Assert.Equal(AcmeStatus.Ok, NativeAbi.acme_object_drop(handle));
-        Assert.Equal(AcmeStatus.ErrInvalidHandle, NativeAbi.acme_object_drop(handle));
-        Assert.Equal(AcmeStatus.ErrInvalidHandle, NativeAbi.acme_future_drop(handle));
-        var e = Assert.Throws<AcmeNativeException>(() => backend.CallSync(handle, MethodIds.ClientState, [0x90]));
-        Assert.Equal(AcmeStatus.ErrInvalidHandle, e.Status);
+        Assert.Equal(WabiStatus.Ok, NativeAbi.wabi_object_drop(handle));
+        Assert.Equal(WabiStatus.ErrInvalidHandle, NativeAbi.wabi_object_drop(handle));
+        Assert.Equal(WabiStatus.ErrInvalidHandle, NativeAbi.wabi_future_drop(handle));
+        var e = Assert.Throws<WabiNativeException>(() => backend.CallSync(handle, MethodIds.ClientState, [0x90]));
+        Assert.Equal(WabiStatus.ErrInvalidHandle, e.Status);
         return Task.CompletedTask;
     }
 
@@ -210,21 +210,21 @@ public static class Program
     {
         var current = NativeBackend.Shared.Info;
         current.EnsureCompatible();
-        var dir = Environment.GetEnvironmentVariable("ACME_FAKE_CORES_DIR");
-        if (dir is null) { Console.WriteLine("    (ACME_FAKE_CORES_DIR not set: using synthetic metadata only)"); }
+        var dir = Environment.GetEnvironmentVariable("WABI_FAKE_CORES_DIR");
+        if (dir is null) { Console.WriteLine("    (WABI_FAKE_CORES_DIR not set: using synthetic metadata only)"); }
         else
         {
             foreach (var (file, reason) in new[] { ("libfake_abi_v2.so", "ABI"), ("libfake_contract_v2.so", "contract"), ("libfake_no_streams.so", "capabilities") })
             {
                 var info = CoreInfo.Probe(Path.Combine(dir, file));
-                var e = Assert.Throws<AcmeIncompatibleLibraryException>(info.EnsureCompatible);
+                var e = Assert.Throws<WabiIncompatibleLibraryException>(info.EnsureCompatible);
                 Console.WriteLine($"    rejected {file} ({reason}): {e.Message}");
             }
         }
-        Assert.Throws<AcmeIncompatibleLibraryException>(() => (current with { AbiVersion = 2u << 16 }).EnsureCompatible());
-        Assert.Throws<AcmeIncompatibleLibraryException>(() => (current with { ContractId = "acme:other@1.0.0" }).EnsureCompatible());
+        Assert.Throws<WabiIncompatibleLibraryException>(() => (current with { AbiVersion = 2u << 16 }).EnsureCompatible());
+        Assert.Throws<WabiIncompatibleLibraryException>(() => (current with { ContractId = "wabi:other@1.0.0" }).EnsureCompatible());
         // Newer minor versions are accepted.
-        (current with { AbiVersion = (1u << 16) | 7, ContractId = "acme:client@1.9.0" }).EnsureCompatible();
+        (current with { AbiVersion = (1u << 16) | 7, ContractId = "wabi:client@1.9.0" }).EnsureCompatible();
         return Task.CompletedTask;
     }
 

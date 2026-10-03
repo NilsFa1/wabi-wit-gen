@@ -28,13 +28,13 @@ pub enum AbiError {
 }
 
 impl AbiError {
-    pub fn status(&self) -> acme_status {
+    pub fn status(&self) -> wabi_status {
         match self {
-            AbiError::InvalidHandle => ACME_ERR_INVALID_HANDLE,
-            AbiError::InvalidArgument(_) => ACME_ERR_INVALID_ARGUMENT,
-            AbiError::UnknownMethod => ACME_ERR_UNKNOWN_METHOD,
-            AbiError::Unsupported => ACME_ERR_UNSUPPORTED,
-            AbiError::Internal(_) => ACME_ERR_INTERNAL,
+            AbiError::InvalidHandle => WABI_ERR_INVALID_HANDLE,
+            AbiError::InvalidArgument(_) => WABI_ERR_INVALID_ARGUMENT,
+            AbiError::UnknownMethod => WABI_ERR_UNKNOWN_METHOD,
+            AbiError::Unsupported => WABI_ERR_UNSUPPORTED,
+            AbiError::Internal(_) => WABI_ERR_INTERNAL,
         }
     }
     pub fn message(&self) -> String {

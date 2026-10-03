@@ -1,0 +1,25 @@
+package demo:greeter@0.1.0;
+
+interface types {
+    record greeting {
+        text: string,
+        count: u32,
+    }
+    variant greet-error {
+        empty-name,
+        failed(string),
+    }
+}
+
+interface api {
+    use types.{greeting, greet-error};
+    resource greeter {
+        constructor(prefix: string);
+        greet: async func(name: string) -> result<greeting, greet-error>;
+        events: func() -> stream<greeting>;
+    }
+}
+
+world greeter-sdk {
+    export api;
+}

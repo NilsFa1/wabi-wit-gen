@@ -26,7 +26,7 @@ jobs:
       - run: pip install ziglang==0.16.0
       - name: unit tests
         working-directory: client-sdk/packages/pki/core-go
-        run: go vet ./... && test -z "$(gofmt -l .)" && go test -count=1 ./...
+        run: go vet ./... && gofmt -d . && test -z "$(gofmt -l .)" && go test -count=1 ./...
       - run: packages/pki/core-go/build.sh linux-x64
       - run: packages/pki/core-go/build.sh linux-arm64
       - run: packages/pki/core-go/build.sh windows-x64

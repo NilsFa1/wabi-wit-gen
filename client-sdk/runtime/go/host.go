@@ -1,4 +1,4 @@
-package acmeabi
+package wabiabi
 
 // Host calls (ABI 1.1, ABI.md §4a): the core calls functions of WIT imports
 // that the APP implements. The core invokes the registered handler with a

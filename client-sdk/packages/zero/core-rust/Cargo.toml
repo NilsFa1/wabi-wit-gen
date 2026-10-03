@@ -2,6 +2,7 @@
 name = "gematik-zero-core"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 description = "gematik:zero PoC core in Rust: DPoP proofs (RFC 9449), signing via host calls"
 publish = false
 
@@ -11,7 +12,7 @@ name = "gematik_zero"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-acme-abi-rt = { path = "../../../runtime/rust" }
+wabi-abi-rt = { path = "../../../runtime/rust" }
 base64 = "0.22"
 getrandom = "0.3"
 serde_json = "1"

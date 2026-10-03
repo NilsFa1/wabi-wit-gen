@@ -1,4 +1,4 @@
-package acmeabi
+package wabiabi
 
 /*
 #include <stdlib.h>
@@ -7,7 +7,7 @@ import "C"
 
 import "unsafe"
 
-// ABI status codes (acme_abi.h).
+// ABI status codes (wabi_abi.h).
 const (
 	OK                 int32 = 0
 	Pending            int32 = 1
@@ -23,7 +23,7 @@ const (
 	ErrInternal        int32 = -8
 )
 
-// Capability bits (acme_abi.h).
+// Capability bits (wabi_abi.h).
 const (
 	CapSyncCalls        uint64 = 1 << 0
 	CapAsyncCalls       uint64 = 1 << 1
@@ -50,14 +50,14 @@ var statusNames = map[int32]unsafe.Pointer{}
 
 func init() {
 	for code, name := range map[int32]string{
-		OK: "ACME_OK", Pending: "ACME_PENDING", Ready: "ACME_READY", StreamEnd: "ACME_STREAM_END",
-		ErrInvalidHandle: "ACME_ERR_INVALID_HANDLE", ErrInvalidArgument: "ACME_ERR_INVALID_ARGUMENT",
-		ErrUnknownMethod: "ACME_ERR_UNKNOWN_METHOD", ErrCancelled: "ACME_ERR_CANCELLED", ErrBusy: "ACME_ERR_BUSY",
-		ErrAlreadyTaken: "ACME_ERR_ALREADY_TAKEN", ErrUnsupported: "ACME_ERR_UNSUPPORTED", ErrInternal: "ACME_ERR_INTERNAL",
+		OK: "WABI_OK", Pending: "WABI_PENDING", Ready: "WABI_READY", StreamEnd: "WABI_STREAM_END",
+		ErrInvalidHandle: "WABI_ERR_INVALID_HANDLE", ErrInvalidArgument: "WABI_ERR_INVALID_ARGUMENT",
+		ErrUnknownMethod: "WABI_ERR_UNKNOWN_METHOD", ErrCancelled: "WABI_ERR_CANCELLED", ErrBusy: "WABI_ERR_BUSY",
+		ErrAlreadyTaken: "WABI_ERR_ALREADY_TAKEN", ErrUnsupported: "WABI_ERR_UNSUPPORTED", ErrInternal: "WABI_ERR_INTERNAL",
 	} {
 		statusNames[code] = CString(name)
 	}
-	statusNames[1000] = CString("ACME_UNKNOWN_STATUS")
+	statusNames[1000] = CString("WABI_UNKNOWN_STATUS")
 }
 
 // StatusName returns a static NUL-terminated C string.

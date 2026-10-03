@@ -27,7 +27,7 @@ if have go; then # Go + gematik libzero
   (cd "$PKG/core-go" && CGO_ENABLED=1 go build -buildmode=c-shared -o "$B/go/libgematik_zero.so" .)
   LIBS[go]="$B/go"
 fi
-if have cargo; then # Rust + acme-abi-rt
+if have cargo; then # Rust + wabi-abi-rt
   (cd "$PKG/core-rust" && cargo build --release --quiet)
   mkdir -p "$B/rust" && cp "${CARGO_TARGET_DIR:-$PKG/core-rust/target}/release/libgematik_zero.so" "$B/rust/"
   LIBS[rust]="$B/rust"
@@ -42,14 +42,24 @@ echo "== app-side test programs"
 FIRST="${LIBS[go]:-${LIBS[rust]:-${LIBS[csharp]}}}"
 gcc -std=gnu11 -Wall -Wextra -Werror -O1 -o "$B/host_calls" "$ROOT/tests/abi/host_calls.c" \
   -I"$PKG/generated/c" -I"$ROOT/abi" -L"$FIRST" -lgematik_zero -lcrypto -lpthread
-HAVE_JAVA=0; HAVE_DART=0
+HAVE_JAVA=0; HAVE_DART=0; HAVE_BUN=0
 if have javac; then
   "$ROOT/sdk/java/build.sh" packages/zero gematik-zero >/dev/null
   J="$ROOT/build/java-gematik-zero"
   mkdir -p "$J/tests"
   javac --release 22 -cp "$J/gematik-zero.jar" -d "$J/tests" "$PKG/tests/java/ZeroTests.java" && HAVE_JAVA=1
 fi
-if [ -x "$DART" ]; then (cd "$PKG/sdk/dart" && "$DART" pub get >/dev/null) && HAVE_DART=1; fi
+if [ -x "$DART" ]; then
+  gcc -std=c11 -shared -fPIC -Wall -Wextra -Werror -I"$ROOT/abi" \
+    "$ROOT/tests/abi/host_lifetime_probe.c" -o "$B/libhost_lifetime_probe.so"
+  export WABI_HOST_PROBE="$B/libhost_lifetime_probe.so"
+  (cd "$PKG/sdk/dart" && "$DART" pub get >/dev/null) && HAVE_DART=1
+fi
+if have bun; then # host calls need Bun >= 1.4 (threadsafe JSCallback)
+  if bun -e 'process.exit(Bun.semver.order(Bun.version, "1.4.0") < 0 ? 1 : 0)'; then
+    (cd "$PKG/sdk/ts" && bun install --frozen-lockfile >/dev/null && bun x tsc --noEmit) && HAVE_BUN=1
+  else SUMMARY+=("SKIP  TypeScript (Bun $(bun --version) < 1.4)"); fi
+fi
 
 for core in go rust csharp; do
   dir="${LIBS[$core]:-}"
@@ -58,16 +68,19 @@ for core in go rust csharp; do
   echo "== core: $core"
   run "$core / C host-call protocol" env LD_LIBRARY_PATH="$dir" "$B/host_calls"
   if have dotnet; then
-    run "$core / C# app" env ACME_NATIVE_LIB="$LIB" dotnet run --project "$PKG/tests/csharp" -c Release
+    run "$core / C# app" env WABI_NATIVE_LIB="$LIB" dotnet run --project "$PKG/tests/csharp" -c Release
   fi
   if [ $HAVE_JAVA = 1 ]; then
     for binding in panama jni; do
-      run "$core / Java app ($binding)" env ACME_NATIVE_LIB="$LIB" java -Dacme.binding=$binding \
-        -Dacme.jni.lib="$J/libacme_jni.so" --enable-native-access=ALL-UNNAMED -cp "$J/gematik-zero.jar:$J/tests" ZeroTests
+      run "$core / Java app ($binding)" env WABI_NATIVE_LIB="$LIB" java -Dwabi.binding=$binding \
+        -Dcom.gematik.zero.runtime.jniLib="$J/libgematik_zero_jni.so" --enable-native-access=ALL-UNNAMED -cp "$J/gematik-zero.jar:$J/tests" ZeroTests
     done
   fi
   if [ $HAVE_DART = 1 ]; then
-    run "$core / Dart app" bash -c "cd '$PKG/sdk/dart' && ACME_NATIVE_LIB='$LIB' '$DART' test -r expanded"
+    run "$core / Dart app" bash -c "cd '$PKG/sdk/dart' && WABI_NATIVE_LIB='$LIB' '$DART' test -r expanded"
+  fi
+  if [ $HAVE_BUN = 1 ]; then
+    run "$core / TypeScript app (Bun)" bash -c "cd '$PKG/sdk/ts' && WABI_NATIVE_LIB='$LIB' bun test"
   fi
 done
 

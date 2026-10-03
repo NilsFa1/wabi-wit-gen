@@ -5,7 +5,7 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Acme.Core;
+namespace Wabi.Core;
 
 /// <summary>A host call that produced no return value (no handler, cancelled, error status, bad answer).</summary>
 sealed class HostCallException(int status, string message) : Exception(message)
@@ -74,7 +74,7 @@ static class HostCalls
         return pending;
     }
 
-    public static unsafe int Reply(ulong call, int status, AcmeBytes response)
+    public static unsafe int Reply(ulong call, int status, WabiBytes response)
     {
         if (Exports.FromBytes(response) is not { } payload) return Status.InvalidArgument;
         if (!PendingCalls.TryRemove(call, out var pending)) return Status.InvalidHandle;
@@ -90,7 +90,7 @@ static unsafe partial class Exports
     public static int HostRegister(nint handler, nint userData) => HostCalls.Register(handler, userData);
 
     [UnmanagedCallersOnly(EntryPoint = Prefix + "host_reply", CallConvs = [typeof(CallConvCdecl)])]
-    public static int HostReply(ulong call, int status, AcmeBytes response)
+    public static int HostReply(ulong call, int status, WabiBytes response)
     {
         try
         {

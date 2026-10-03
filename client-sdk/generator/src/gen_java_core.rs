@@ -24,7 +24,7 @@ pub fn emit_core(m: &Model) -> Result<Vec<(String, String)>> {
         }
     }
     let dir = pkg(m).replace('.', "/");
-    let mut files = vec![("acme/core/runtime/Binding.java".to_string(), binding(m))];
+    let mut files = vec![("wabi/core/runtime/Binding.java".to_string(), binding(m))];
     for r in &m.resources {
         files.push((format!("{dir}/{}Resource.java", pascal(&r.name)), resource(m, r)));
     }
@@ -34,7 +34,7 @@ pub fn emit_core(m: &Model) -> Result<Vec<(String, String)>> {
 }
 
 fn binding(m: &Model) -> String {
-    let mut o = header("acme.core.runtime");
+    let mut o = header("wabi.core.runtime");
     w!(o, "/** Binds the generic Java core runtime to package {}. */", m.contract_id());
     w!(o, "final class Binding {{");
     w!(o, "    private Binding() {{}}");
@@ -81,7 +81,7 @@ fn resource(m: &Model, r: &Resource) -> String {
     w!(o, "// Implemented by the Java core. Async methods return a CompletionStage");
     w!(o, "// (cancelled when the host cancels); domain errors are thrown / completed");
     w!(o, "// exceptionally with the generated exception. close() runs on handle drop.");
-    w!(o, "public interface {}Resource extends acme.core.runtime.CoreObject {{", pascal(&r.name));
+    w!(o, "public interface {}Resource extends wabi.core.runtime.CoreObject {{", pascal(&r.name));
     for f in &r.methods {
         docs(&mut o, &f.docs, "    ");
         if let Some(ex) = error_note(f) {
@@ -137,7 +137,7 @@ fn encode_ok(o: &mut String, f: &Func, ind: &str) {
     }
 }
 
-/// Encodes a domain error `cause` into `w` or rethrows it (unexpected failures -> ACME_ERR_INTERNAL).
+/// Encodes a domain error `cause` into `w` or rethrows it (unexpected failures -> WABI_ERR_INTERNAL).
 fn encode_err(o: &mut String, f: &Func, ind: &str, rethrow: &str) {
     match &f.ret {
         Ret::Result { err: Some(Ty::Named(n)), .. } => {
@@ -152,12 +152,15 @@ fn encode_err(o: &mut String, f: &Func, ind: &str, rethrow: &str) {
 
 fn glue(m: &Model) -> String {
     let mut o = header(&pkg(m));
-    w!(o, "import acme.core.runtime.AbiException;");
-    w!(o, "import acme.core.runtime.CorePackage;");
-    w!(o, "import acme.core.runtime.Handles;");
-    w!(o, "import acme.core.runtime.Status;");
-    w!(o, "import com.acme.client.runtime.MsgPackReader;");
-    w!(o, "import com.acme.client.runtime.MsgPackWriter;");
+    w!(o, "import wabi.core.runtime.AbiException;");
+    w!(o, "import wabi.core.runtime.CorePackage;");
+    w!(o, "import wabi.core.runtime.Handles;");
+    w!(o, "import wabi.core.runtime.Status;");
+    // MessagePack of the package's SDK runtime (generated/java/<pkg>/runtime).
+    let rt = crate::runtime::java_package(m);
+    w!(o, "import {rt}.MsgPackReader;");
+    w!(o, "import {rt}.MsgPackWriter;");
+    w!(o, "import {rt}.WabiProtocolException;");
     w!(o, "import java.util.concurrent.CompletableFuture;");
     w!(o, "import java.util.concurrent.CompletionException;");
     w!(o, "import java.util.concurrent.CompletionStage;");
@@ -182,8 +185,27 @@ fn glue(m: &Model) -> String {
     w!(o, "        return t;");
     w!(o, "    }}");
     w!(o, "");
+    // An undecodable request is the caller's fault (INVALID_ARGUMENT). Translated
+    // here because only the generated glue knows the package's runtime namespace.
     w!(o, "    @Override");
     w!(o, "    public byte[] dispatchSync(long object, int methodId, byte[] request) throws AbiException {{");
+    w!(o, "        try {{");
+    w!(o, "            return sync(object, methodId, request);");
+    w!(o, "        }} catch (WabiProtocolException e) {{");
+    w!(o, "            throw new AbiException(Status.INVALID_ARGUMENT, e.getMessage());");
+    w!(o, "        }}");
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    @Override");
+    w!(o, "    public Supplier<CompletionStage<byte[]>> dispatchAsync(long object, int methodId, byte[] request) throws AbiException {{");
+    w!(o, "        try {{");
+    w!(o, "            return async(object, methodId, request);");
+    w!(o, "        }} catch (WabiProtocolException e) {{");
+    w!(o, "            throw new AbiException(Status.INVALID_ARGUMENT, e.getMessage());");
+    w!(o, "        }}");
+    w!(o, "    }}");
+    w!(o, "");
+    w!(o, "    private byte[] sync(long object, int methodId, byte[] request) throws AbiException {{");
     w!(o, "        var w = new MsgPackWriter();");
     w!(o, "        switch (methodId) {{");
     for r in &m.resources {
@@ -221,8 +243,7 @@ fn glue(m: &Model) -> String {
     w!(o, "        return w.toByteArray();");
     w!(o, "    }}");
     w!(o, "");
-    w!(o, "    @Override");
-    w!(o, "    public Supplier<CompletionStage<byte[]>> dispatchAsync(long object, int methodId, byte[] request) throws AbiException {{");
+    w!(o, "    private Supplier<CompletionStage<byte[]>> async(long object, int methodId, byte[] request) throws AbiException {{");
     w!(o, "        switch (methodId) {{");
     for r in &m.resources {
         let rn = pascal(&r.name);

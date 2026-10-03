@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gematik/zero-lab/go/gempki"
@@ -55,19 +56,24 @@ type ocspCall struct {
 	err    error
 }
 
+type ocspMetrics struct {
+	hits   atomic.Uint64
+	misses atomic.Uint64
+}
+
 type ocspCache struct {
 	mu       sync.Mutex
 	entries  map[certID]*list.Element // of *ocspEntry
 	lru      *list.List
 	inFlight map[certID]*ocspCall
-	hits     uint64
-	misses   uint64
+	metrics  *ocspMetrics
 	ttl      time.Duration
 	max      int
 }
 
-func newOCSPCache() *ocspCache {
+func newOCSPCache(metrics *ocspMetrics) *ocspCache {
 	return &ocspCache{
+		metrics:  metrics,
 		entries:  map[certID]*list.Element{},
 		lru:      list.New(),
 		inFlight: map[certID]*ocspCall{},
@@ -86,7 +92,7 @@ func (c *ocspCache) check(ctx context.Context, cert, issuer *x509.Certificate, n
 		e := el.Value.(*ocspEntry)
 		if now.Before(e.expires) {
 			c.lru.MoveToFront(el)
-			c.hits++
+			c.metrics.hits.Add(1)
 			c.mu.Unlock()
 			return e.result, nil
 		}
@@ -94,7 +100,7 @@ func (c *ocspCache) check(ctx context.Context, cert, issuer *x509.Certificate, n
 		delete(c.entries, id)
 	}
 	if call, ok := c.inFlight[id]; ok { // someone is asking the responder already
-		c.hits++
+		c.metrics.hits.Add(1)
 		c.mu.Unlock()
 		select {
 		case <-call.done:
@@ -105,7 +111,7 @@ func (c *ocspCache) check(ctx context.Context, cert, issuer *x509.Certificate, n
 	}
 	call := &ocspCall{done: make(chan struct{})}
 	c.inFlight[id] = call
-	c.misses++
+	c.metrics.misses.Add(1)
 	c.mu.Unlock()
 
 	// The shared request must not die with the first caller's context.
@@ -131,10 +137,4 @@ func (c *ocspCache) check(ctx context.Context, cert, issuer *x509.Certificate, n
 	c.mu.Unlock()
 	close(call.done)
 	return call.result, call.err
-}
-
-func (c *ocspCache) stats() CacheStats {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return CacheStats{OcspHits: c.hits, OcspMisses: c.misses, OcspEntries: uint32(c.lru.Len())}
 }

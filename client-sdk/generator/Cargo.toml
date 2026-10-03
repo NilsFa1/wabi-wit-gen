@@ -1,7 +1,8 @@
 [package]
-name = "acme-wit-gen"
+name = "wabi-wit-gen"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 
 [dependencies]
 wit-parser = "0.259"

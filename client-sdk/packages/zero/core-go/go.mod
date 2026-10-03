@@ -3,7 +3,7 @@ module gematik.example/zerocore
 go 1.23.2
 
 require (
-	acme.example/acmeabi v0.0.0
+	wabi.example/wabiabi v0.0.0
 	github.com/gematik/zero-lab/go/libzero v0.1.0
 	github.com/lestrrat-go/jwx/v2 v2.1.0
 )
@@ -28,4 +28,4 @@ require (
 	golang.org/x/text v0.19.0 // indirect
 )
 
-replace acme.example/acmeabi => ../../../runtime/go
+replace wabi.example/wabiabi => ../../../runtime/go

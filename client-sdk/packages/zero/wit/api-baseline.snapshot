@@ -1,0 +1,13 @@
+# Released API baseline v1; update only as an explicit release step.
+contract	gematik:zero@0.1.0
+case/zero-error.crypto	2:string
+case/zero-error.invalid-input	3:string
+case/zero-error.key-not-found	1:string
+host/host-keys.public-key	257:sync(key-id:string)->result<bytes,named<zero-error>>
+host/host-keys.sign	258:sync(key-id:string,digest:bytes)->result<bytes,named<zero-error>>
+import/host-keys	1
+method/dpop-signer.constructor	512:sync(key-id:string)->_
+method/dpop-signer.create-proof	514:async(http-method:string,http-url:string,access-token:option<string>,nonce:option<string>)->result<string,named<zero-error>>
+method/dpop-signer.thumbprint	513:async()->result<string,named<zero-error>>
+resource/dpop-signer	2
+type/zero-error	variant

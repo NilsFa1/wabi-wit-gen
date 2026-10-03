@@ -1,0 +1,5 @@
+module CGematikZero [system] {
+    header "shim.h"
+    link "gematik_zero"
+    export *
+}

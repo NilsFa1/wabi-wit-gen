@@ -16,28 +16,28 @@ have_zig() { have zig || python3 -c "import ziglang" 2>/dev/null; }
 
 echo "== building cores"
 (cd "$ROOT/core-rust" && cargo build --release --quiet)
-declare -A LIB=( [rust]="${CARGO_TARGET_DIR:-$ROOT/core-rust/target}/release/libacme_client.so" )
+declare -A LIB=( [rust]="${CARGO_TARGET_DIR:-$ROOT/core-rust/target}/release/libwabi_client.so" )
 declare -A PROFILE=( [rust]=full [go]=full [zig]=basic [csharp]=full )
 if have go; then
-  (cd "$ROOT/alt-cores/go" && CGO_ENABLED=1 go build -buildmode=c-shared -o "$B/go/libacme_client.so" .)
-  LIB[go]="$B/go/libacme_client.so"
+  (cd "$ROOT/alt-cores/go" && CGO_ENABLED=1 go build -buildmode=c-shared -o "$B/go/libwabi_client.so" .)
+  LIB[go]="$B/go/libwabi_client.so"
 fi
 if have_zig; then
-  (cd "$ROOT/alt-cores/zig" && zigc build-lib -dynamic -lc -O ReleaseSafe acme_core.zig -femit-bin="$B/zig/libacme_client.so")
+  (cd "$ROOT/alt-cores/zig" && zigc build-lib -dynamic -lc -O ReleaseSafe wabi_core.zig -femit-bin="$B/zig/libwabi_client.so")
   rm -f "$ROOT/alt-cores/zig"/*.o
-  LIB[zig]="$B/zig/libacme_client.so"
+  LIB[zig]="$B/zig/libwabi_client.so"
 fi
 
 if have dotnet; then # C# core, compiled ahead-of-time to a plain native library (NativeAOT)
   (cd "$ROOT/alt-cores/csharp" && dotnet publish -c Release -r linux-x64 -nologo -v q -o "$B/csharp-core/publish" >/dev/null)
-  mkdir -p "$B/csharp-core" && cp "$B/csharp-core/publish/acme_client.so" "$B/csharp-core/libacme_client.so"
-  LIB[csharp]="$B/csharp-core/libacme_client.so"
+  mkdir -p "$B/csharp-core" && cp "$B/csharp-core/publish/wabi_client.so" "$B/csharp-core/libwabi_client.so"
+  LIB[csharp]="$B/csharp-core/libwabi_client.so"
 fi
 
 echo "== building test fixtures and SDK test binaries"
 gcc -shared -fPIC -o "$B/fake/libfake_abi_v2.so" "$ROOT/tests/compatibility/fake_core.c" '-DFAKE_ABI_VERSION=(2u<<16)'
-gcc -shared -fPIC -o "$B/fake/libfake_contract_v2.so" "$ROOT/tests/compatibility/fake_core.c" '-DFAKE_CONTRACT="acme:client@2.0.0"'
-gcc -shared -fPIC -o "$B/fake/libfake_no_streams.so" "$ROOT/tests/compatibility/fake_core.c" '-DFAKE_CAPS=(ACME_CAP_SYNC_CALLS|ACME_CAP_ASYNC_CALLS)'
+gcc -shared -fPIC -o "$B/fake/libfake_contract_v2.so" "$ROOT/tests/compatibility/fake_core.c" '-DFAKE_CONTRACT="wabi:client@2.0.0"'
+gcc -shared -fPIC -o "$B/fake/libfake_no_streams.so" "$ROOT/tests/compatibility/fake_core.c" '-DFAKE_CAPS=(WABI_CAP_SYNC_CALLS|WABI_CAP_ASYNC_CALLS)'
 gcc -std=c11 -Wall -Wextra -Werror -O1 -o "$B/conformance" "$ROOT/tests/abi/conformance.c" -ldl -lpthread
 HAVE_DOTNET=0; HAVE_JAVA=0; HAVE_DART=0
 DART="$(command -v dart || echo /opt/dart-sdk/bin/dart)"
@@ -46,13 +46,13 @@ if have dotnet; then
 fi
 if have javac; then
   "$ROOT/sdk/java/build.sh" >/dev/null
-  javac --release 22 -cp "$B/java/acme-client.jar" -d "$B/java/tests" "$ROOT/tests/java/AcmeClientTests.java" && HAVE_JAVA=1
+  javac --release 22 -cp "$B/java/wabi-client.jar" -d "$B/java/tests" "$ROOT/tests/java/WabiClientTests.java" && HAVE_JAVA=1
 fi
 if [ -x "$DART" ]; then
   (cd "$ROOT/sdk/dart" && "$DART" pub get >/dev/null) && HAVE_DART=1
 fi
-export ACME_FAKE_CORES_DIR="$B/fake"
-dart_tests() { (cd "$ROOT/sdk/dart" && ACME_NATIVE_LIB="$1" ACME_TEST_PROFILE="$2" "$DART" test -r compact | tail -1); }
+export WABI_FAKE_CORES_DIR="$B/fake"
+dart_tests() { (cd "$ROOT/sdk/dart" && WABI_NATIVE_LIB="$1" WABI_TEST_PROFILE="$2" "$DART" test -r compact | tail -1); }
 
 declare -a SUMMARY=()
 run() { # name, command...
@@ -68,22 +68,22 @@ for core in ${CORES:-rust go zig csharp}; do
   flag=""; [ "$prof" = basic ] && flag="--basic"
   echo "== core: $core ($prof profile)"
   run "$core / C ABI conformance" "$B/conformance" "$lib" --profile "$prof"
-  [ $HAVE_DOTNET = 1 ] && run "$core / C# SDK tests" env ACME_NATIVE_LIB="$lib" dotnet "$B/csharp-tests/Acme.Client.Tests.dll" $flag
-  [ $HAVE_JAVA = 1 ] && run "$core / Java SDK tests (Panama)" env ACME_NATIVE_LIB="$lib" \
-      java -Dacme.binding=panama --enable-native-access=ALL-UNNAMED -cp "$B/java/acme-client.jar:$B/java/tests" AcmeClientTests $flag
-  [ $HAVE_JAVA = 1 ] && [ -f "$B/java/libacme_jni.so" ] && run "$core / Java SDK tests (JNI, Android path)" env ACME_NATIVE_LIB="$lib" \
-      java -Dacme.binding=jni -Dacme.jni.lib="$B/java/libacme_jni.so" -cp "$B/java/acme-client.jar:$B/java/tests" AcmeClientTests $flag
+  [ $HAVE_DOTNET = 1 ] && run "$core / C# SDK tests" env WABI_NATIVE_LIB="$lib" dotnet "$B/csharp-tests/Wabi.Client.Tests.dll" $flag
+  [ $HAVE_JAVA = 1 ] && run "$core / Java SDK tests (Panama)" env WABI_NATIVE_LIB="$lib" \
+      java -Dwabi.binding=panama --enable-native-access=ALL-UNNAMED -cp "$B/java/wabi-client.jar:$B/java/tests" WabiClientTests $flag
+  [ $HAVE_JAVA = 1 ] && [ -f "$B/java/libwabi_client_jni.so" ] && run "$core / Java SDK tests (JNI, Android path)" env WABI_NATIVE_LIB="$lib" \
+      java -Dwabi.binding=jni -Dcom.wabi.client.runtime.jniLib="$B/java/libwabi_client_jni.so" -cp "$B/java/wabi-client.jar:$B/java/tests" WabiClientTests $flag
   [ $HAVE_DART = 1 ] && run "$core / Dart SDK tests" dart_tests "$lib" "$prof"
 done
 
-# Two packages (Rust core as acme_client, Zig core rebuilt as geo_lib) statically
+# Two packages (Rust core as wabi_client, Zig core rebuilt as geo_lib) statically
 # linked into ONE binary: only possible because of per-package symbol prefixes.
 if have_zig; then
   M="$B/multi" && rm -rf "$M" && mkdir -p "$M/zig"
-  cp "$ROOT/alt-cores/zig/acme_core.zig" "$M/zig/" && printf 'pub const value = "geo_lib";\n' > "$M/zig/acme_prefix.zig"
-  (cd "$M/zig" && zigc build-lib -lc -O ReleaseSafe -fPIC -fcompiler-rt acme_core.zig -femit-bin=../libgeo_lib.a && rm -f ./*.o)
+  cp "$ROOT/alt-cores/zig/wabi_core.zig" "$M/zig/" && printf 'pub const value = "geo_lib";\n' > "$M/zig/wabi_prefix.zig"
+  (cd "$M/zig" && zigc build-lib -lc -O ReleaseSafe -fPIC -fcompiler-rt wabi_core.zig -femit-bin=../libgeo_lib.a && rm -f ./*.o)
   (cd "$ROOT/core-rust" && cargo build --release --lib --quiet)
-  RUST_A="${CARGO_TARGET_DIR:-$ROOT/core-rust/target}/release/libacme_client.a"
+  RUST_A="${CARGO_TARGET_DIR:-$ROOT/core-rust/target}/release/libwabi_client.a"
   gcc -std=gnu11 -Wall -Wextra -Werror -O1 -I"$ROOT/abi" -I"$ROOT/generated/c" -o "$M/multi_package" \
     "$ROOT/tests/abi/multi_package.c" "$RUST_A" "$M/libgeo_lib.a" -lpthread -ldl -lm
   run "rust+zig / two packages in one static binary" "$M/multi_package"

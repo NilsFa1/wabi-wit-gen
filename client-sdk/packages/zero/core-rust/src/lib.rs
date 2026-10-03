@@ -6,7 +6,7 @@
 //! signature is a host call to the imported WIT interface `host-keys`
 //! (ABI 1.1), e.g. into the Secure Enclave or the Android Keystore.
 //!
-//!   generated.rs  from packages/zero/wit (acme-wit-gen `rust` target)
+//!   generated.rs  from packages/zero/wit (wabi-wit-gen `rust` target)
 //!   lib.rs        this file: business logic only
 
 mod generated;

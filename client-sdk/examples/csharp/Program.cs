@@ -2,14 +2,14 @@
 // Which core implements it (Rust, Go, Zig) is decided by the native library
 // that gets loaded — this file never changes.
 using System.Text;
-using Acme.Client;
+using Wabi.Client;
 
 var options = new ClientOptions(
     Endpoint: args.FirstOrDefault() ?? "mem://example",
     ApiKey: "demo-key",
     RequestTimeoutMs: 5_000);
 
-await using var client = new AcmeClient(options);
+await using var client = new WabiClient(options);
 
 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 var listener = Task.Run(async () =>

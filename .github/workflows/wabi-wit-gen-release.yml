@@ -1,0 +1,38 @@
+name: wabi-wit-gen release
+
+# Publishes the npm package @nfails/wabi-wit-gen (generator as WebAssembly) when a tag
+# wabi-wit-gen-v<version> is pushed. The version must match generator/Cargo.toml.
+# Needs the repository secret NPM_TOKEN (npm automation token).
+on:
+  push:
+    tags: ["wabi-wit-gen-v*"]
+
+permissions:
+  contents: read
+  id-token: write # npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: client-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-wasip1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
+      - uses: oven-sh/setup-bun@v2
+      - name: version of the tag matches Cargo.toml
+        run: |
+          want="${GITHUB_REF_NAME#wabi-wit-gen-v}"
+          have=$(sed -n 's/^version = "\(.*\)"/\1/p' generator/Cargo.toml | head -1)
+          [ "$want" = "$have" ] || { echo "tag $want != generator/Cargo.toml $have"; exit 1; }
+      - run: generator/npm/build.sh
+      - run: generator/npm/test.sh
+      - name: publish
+        working-directory: client-sdk/generator/npm
+        run: npm publish --provenance --access public nfails-wabi-wit-gen-*.tgz
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

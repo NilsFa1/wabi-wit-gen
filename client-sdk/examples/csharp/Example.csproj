@@ -6,6 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../sdk/csharp/Acme.Client/Acme.Client.csproj" />
+    <ProjectReference Include="../../sdk/csharp/Wabi.Client/Wabi.Client.csproj" />
   </ItemGroup>
 </Project>

@@ -33,7 +33,7 @@ run "Java core / JVM tests" bash -c "cd '$PKG/core-java' && mvn -B -q test -Dpki
 # run_apps <core> <library>: the unchanged SDK test apps against one core.
 run_apps() {
   local core="$1"
-  export ACME_NATIVE_LIB="$2"
+  export WABI_NATIVE_LIB="$2"
   if have dotnet; then
     run "$core / C# app" dotnet run --project "$PKG/tests/csharp" -c Release
   fi
@@ -45,7 +45,7 @@ run_apps() {
       javac --release 22 -cp "$J/gematik-pki.jar" -d "$J/tests" "$PKG/tests/java/PkiTests.java"
     fi
     for binding in panama jni; do
-      run "$core / Java app ($binding)" java -Dacme.binding=$binding -Dacme.jni.lib="$J/libacme_jni.so" \
+      run "$core / Java app ($binding)" java -Dwabi.binding=$binding -Dcom.gematik.pki.runtime.jniLib="$J/libgematik_pki_jni.so" \
         --enable-native-access=ALL-UNNAMED -cp "$J/gematik-pki.jar:$J/tests" PkiTests
     done
   fi

@@ -1,6 +1,6 @@
 # Dart-SDK in Flutter verwenden
 
-Das Dart-SDK (`sdk/dart`, Paket `acme_client`) ist reines Dart mit `dart:ffi`.
+Das Dart-SDK (`sdk/dart`, Paket `wabi_client`) ist reines Dart mit `dart:ffi`.
 Es hat keine Flutter-Abhängigkeit und läuft deshalb unverändert in Flutter-Apps
 (Android, iOS, macOS, Windows, Linux). Nicht unterstützt ist **Flutter Web**,
 weil es dort kein `dart:ffi` gibt. Dafür ist der Weg über die WebAssembly-
@@ -11,31 +11,90 @@ Komponente vorgesehen (siehe [COMPONENT_MODEL.md](COMPONENT_MODEL.md)).
 ```yaml
 # pubspec.yaml der App
 dependencies:
-  acme_client:
+  wabi_client:
     path: ../client-sdk/sdk/dart   # oder git: / eigener Pub-Server
 ```
 
-Hinweis: `sdk/dart/lib/src/{runtime,generated}` sind Symlinks auf
-`runtime/dart` und `generated/dart`, analog zum Swift-Paket. Für einen
-Pub-Server oder unter Windows ohne Symlink-Unterstützung werden die beiden
-Verzeichnisse beim Paketieren kopiert.
+Mehr ist nicht nötig: Die native Core-Bibliothek bringt das Paket über
+**Dart native assets** selbst mit (Flutter ≥ 3.38 bzw. Dart ≥ 3.10). Es gibt
+keine manuellen Schritte für jniLibs, xcframework, DLL oder dylib. Lauffähiges
+Beispiel mit Widget- und Integrationstest: [`examples/flutter`](../examples/flutter).
 
-## Native Bibliothek mitliefern
+Hinweis: `sdk/dart/lib/src/generated` ist ein Symlink auf `generated/dart`
+(analog zum Swift-Paket); die Runtime liegt darin unter `runtime/`, weil
+`wabi-wit-gen` sie neben den generierten Code schreibt. Für einen Pub-Server
+oder unter Windows ohne Symlink-Unterstützung wird das Verzeichnis beim
+Paketieren kopiert.
 
-`NativeBackend.shared` lädt je Plattform (mit `ACME_NATIVE_LIB` überschreibbar):
+## Native Bibliothek: Build-Hook (Dart native assets)
 
-| Plattform | geladen wird | Herkunft (`scripts/build-native.sh`) | Ablage im Flutter-Projekt |
-|---|---|---|---|
-| Android | `libacme_client.so` | `build/native/android/jniLibs/<abi>/` | `android/app/src/main/jniLibs/<abi>/` |
-| iOS | `DynamicLibrary.process()` (statisch gelinkt) | `build/native/apple/AcmeClient.xcframework` | in Xcode einbinden oder per Podspec `vendored_frameworks`; Linker-Flag `-force_load`, damit die Symbole nicht wegoptimiert werden |
-| macOS | `libacme_client.dylib` | `build/native/osx/` | in `Contents/Frameworks` des App-Bundles |
-| Windows | `acme_client.dll` | `build/native/win-x64/` | neben die `.exe` (CMake `install`) |
-| Linux | `libacme_client.so` | `build/native/linux-x64/` | `bundle/lib/` (CMake `install`) |
+`hook/build.dart` des Pakets ruft den vom Generator erzeugten Hook
+(`generated/dart/build_hook.dart`) auf; die Logik ist generisch
+(`generator/runtime/dart/native_assets.dart`, im Paket unter `lib/src/generated/runtime/`) und für jedes WIT-Paket gleich
+(`wabi_client`, `gematik_pki`, `gematik_zero`). Flutter, `dart run` und
+`dart test` führen den Hook pro Zielplattform und Architektur aus und bündeln
+die gelieferte Bibliothek:
 
-Mittelfristig ist die Paketierung über Dart **native assets**
-(`hook/build.dart`) sauberer: Das Paket baut oder lädt die Bibliothek dann
-selbst, und Flutter bündelt sie automatisch für jede Plattform (siehe
-[ROADMAP.md](ROADMAP.md)).
+| Plattform | landet in (automatisch) |
+|---|---|
+| Android | `lib/<abi>/` im APK/AAB |
+| iOS, macOS | als Framework im App-Bundle (Universal-Bibliotheken werden pro Architektur ausgedünnt) |
+| Windows | neben der `.exe` |
+| Linux | `bundle/lib/` |
+| `dart run` / `dart test` / `flutter test` | `.dart_tool/`, für den Host |
+
+Woher die Bibliothek kommt, legt die **App** in ihrer `pubspec.yaml` fest
+(user-defines). Die erste zutreffende Quelle gewinnt:
+
+```yaml
+hooks:
+  user_defines:
+    wabi_client:                     # Name des SDK-Pakets
+      library: ../core/libwabi_client.so     # 1. genau eine Datei (nur für den Host sinnvoll)
+      prebuilt_dir: ../build/native          # 2. Verzeichnis mit Unterordnern je Ziel (unten)
+      release_url: https://…/releases/v1.0.0 # 3. Download, geprüft gegen native/SHA256SUMS des Pakets
+      required: true                         # Build-Fehler statt Laufzeit-Fallback, wenn nichts gefunden wird
+```
+
+Ohne Angaben gelten die Voreinstellungen aus `wabi-gen.conf`
+(`dart_prebuilt_dir`, `dart_release_url`); für `wabi_client` ist das
+`client-sdk/build/native`, also die Ausgabe von `scripts/build-native.sh`, für
+`gematik_pki` `build/pki-go` (`packages/pki/core-go/build.sh`).
+
+Aufbau eines `prebuilt_dir` bzw. eines Releases (`<dir>/<ziel>/<datei>`):
+
+| Ziel | Unterordner (erster vorhandener gewinnt) | Datei |
+|---|---|---|
+| Android | `android/jniLibs/<abi>/` (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | `libwabi_client.so` |
+| iOS-Gerät | `ios-arm64/`, `ios/` | `libwabi_client.dylib` |
+| iOS-Simulator | `ios-simulator-<arch>/`, `ios-simulator/` | `libwabi_client.dylib` |
+| macOS | `macos-<arch>/`, `macos/`, `osx/` | `libwabi_client.dylib` |
+| Windows | `windows-<arch>/`, `win-<arch>/` | `wabi_client.dll` |
+| Linux | `linux-<arch>/` (`x64`, `arm64`) | `libwabi_client.so` |
+
+Auf iOS braucht native assets eine **dynamische** Bibliothek; beide
+Build-Skripte legen deshalb neben dem xcframework (statisch, für Swift) auch
+`ios/` und `ios-simulator/` an.
+
+Beim Download (`release_url`) wird nur geladen, was in `native/SHA256SUMS` des
+Pakets steht (Format von `sha256sum`, Pfade wie oben); jede Datei wird gegen
+ihre Prüfsumme geprüft und im Build-Cache abgelegt. Das ist der Weg für ein
+veröffentlichtes Paket (siehe [PACKAGING.md](PACKAGING.md)).
+
+### Laden zur Laufzeit
+
+`NativeBackend.shared` sucht den Core in dieser Reihenfolge:
+
+1. `WABI_NATIVE_LIB` (expliziter Pfad, z. B. Tests gegen mehrere Cores),
+2. das Code-Asset des Pakets (`NativeAbi.asset()`, `@Native`-Bindings mit der
+   Asset-ID `package:<paket>/src/generated/native_abi.dart`) bzw. dieselben
+   Symbole im Prozess (statisch gelinktes xcframework),
+3. die Namenskonvention (`libwabi_client.so`, `wabi_client.dll`,
+   `libwabi_client.dylib`) für von Hand mitgelieferte Bibliotheken.
+
+Die bisherige manuelle Ablage (jniLibs, `Contents/Frameworks`, neben die
+`.exe`, `bundle/lib/`, xcframework mit `-force_load`) funktioniert also weiter,
+ist aber nicht mehr nötig.
 
 ## Threads, Isolates und UI
 
@@ -47,7 +106,7 @@ selbst, und Flutter bündelt sie automatisch für jede Plattform (siehe
   voraus (ABI.md §6).
 * Die gesamte Netzwerkarbeit passiert im Core. Der UI-Isolate kodiert und
   dekodiert nur kleine Payloads; ein eigener Hintergrund-Isolate ist nicht nötig.
-* Handles sind prozessweit gültig. Ein `AcmeClient` gehört aber zu seinem
+* Handles sind prozessweit gültig. Ein `WabiClient` gehört aber zu seinem
   Isolate, weil Dart-Objekte nicht zwischen Isolates geteilt werden.
 
 ## Beispiel-Widget
@@ -55,7 +114,7 @@ selbst, und Flutter bündelt sie automatisch für jede Plattform (siehe
 ```dart
 class CustomerView extends StatefulWidget {
   const CustomerView({super.key, required this.client});
-  final AcmeClient client;
+  final WabiClient client;
   @override
   State<CustomerView> createState() => _CustomerViewState();
 }

@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Dependency-free test runner; the core under test is chosen with ACME_NATIVE_LIB. -->
+  <!-- Dependency-free test runner; the core under test is chosen with WABI_NATIVE_LIB. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>

@@ -1,0 +1,5 @@
+wabi-wit-gen.wasm
+*.tgz
+node_modules/
+LICENSE
+NOTICE

@@ -9,10 +9,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import acme.core.runtime.AbiException;
-import acme.core.runtime.Status;
-import com.acme.client.runtime.MsgPackReader;
-import com.acme.client.runtime.MsgPackWriter;
+import wabi.core.runtime.AbiException;
+import wabi.core.runtime.Status;
+import com.gematik.pki.runtime.MsgPackReader;
+import com.gematik.pki.runtime.MsgPackWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;

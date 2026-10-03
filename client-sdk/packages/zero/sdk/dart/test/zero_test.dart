@@ -1,7 +1,8 @@
 // The app side of host calls in Dart/Flutter: the app owns the key (here a
 // pointycastle key standing in for the Secure Enclave / Android Keystore),
 // the Go core (libzero) builds the DPoP proof and asks the app to sign.
-// The core under test is chosen with ACME_NATIVE_LIB.
+// The core under test is chosen with WABI_NATIVE_LIB.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -87,6 +88,23 @@ final class AppKeys implements HostKeys {
   }
 }
 
+final class BlockingKeys implements HostKeys {
+  BlockingKeys(this.app);
+  final AppKeys app;
+  final entered = Completer<void>();
+  final resume = Completer<void>();
+
+  @override
+  Future<Uint8List> publicKey(String keyId) async {
+    if (!entered.isCompleted) entered.complete();
+    await resume.future;
+    return app.publicKey(keyId);
+  }
+
+  @override
+  Future<Uint8List> sign(String keyId, Uint8List digest) => app.sign(keyId, digest);
+}
+
 void main() {
   final app = AppKeys();
   setUpAll(() => print('core under test: ${NativeBackend.shared.description}'));
@@ -95,6 +113,25 @@ void main() {
     final signer = DpopSigner('dpop-key');
     await expectLater(signer.thumbprint(), throwsA(isA<ZeroErrorCrypto>()));
     signer.close();
+  });
+
+  test('an in-flight host call survives unregister and replacement', () async {
+    final signer = DpopSigner('dpop-key');
+    final blocked = BlockingKeys(app);
+    ZeroHost.register(blocked);
+    final pending = signer.thumbprint();
+    try {
+      await blocked.entered.future.timeout(const Duration(seconds: 5));
+      ZeroHost.unregister();
+      ZeroHost.register(AppKeys()); // future calls use a new key
+      blocked.resume.complete();
+      final json = '{"crv":"P-256","kty":"EC","x":"${_b64url(app.x)}","y":"${_b64url(app.y)}"}';
+      expect(await pending.timeout(const Duration(seconds: 5)), _b64url(_sha256(utf8.encode(json))));
+    } finally {
+      if (!blocked.resume.isCompleted) blocked.resume.complete();
+      ZeroHost.unregister();
+      signer.close();
+    }
   });
 
   group('registered', () {

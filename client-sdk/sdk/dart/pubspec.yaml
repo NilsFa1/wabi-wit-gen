@@ -1,15 +1,18 @@
-name: acme_client
+name: wabi_client
 description: >-
-  Acme client SDK for Dart and Flutter. Generated from wit/client.wit plus a
-  generic dart:ffi runtime; works with any core implementing the Acme native ABI (abi/acme_abi.h).
+  Wabi client SDK for Dart and Flutter. Generated from wit/client.wit plus a
+  generic dart:ffi runtime; works with any core implementing the Wabi native ABI (abi/wabi_abi.h).
 version: 0.1.0
 publish_to: none
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"
+  sdk: ">=3.10.0 <4.0.0" # native assets (hook/build.dart)
 
 dependencies:
+  code_assets: ^2.1.0 # hook/build.dart
+  crypto: ^3.0.6 # hook/build.dart: release checksums
   ffi: ^2.1.0
+  hooks: ^2.2.0 # hook/build.dart
 
 dev_dependencies:
   lints: ^5.0.0

@@ -1,4 +1,4 @@
-use acme_abi_rt::host::AbiStream;
+use wabi_abi_rt::host::AbiStream;
 use crate::generated::{
     ClientError, ClientEvent, ClientOptions, ClientResource, Command, CommandResult, ConnectionState, Customer,
 };

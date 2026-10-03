@@ -8,10 +8,10 @@
 
   Sources compiled into the core:
     src/main/java                 hand-written business logic (Core, GemLibPkiVerifier)
-    src/generated/java            acme-wit-gen `java-core` target (dispatcher, interfaces)
+    src/generated/java            wabi-wit-gen `java-core` target (dispatcher, interfaces)
     ../../../runtime/java-core    generic Java core runtime (+ GraalVM entry points)
     ../generated/java (subset)    contract types + codec shared with the Java SDK
-    ../../../runtime/java (subset) MessagePack + exception base classes
+    ../generated/java (runtime subset) MessagePack + exception base classes of the SDK runtime
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -78,13 +78,17 @@
                   <directory>${project.basedir}/../generated/java</directory>
                   <includes><include>com/gematik/pki/**/*.java</include></includes>
                   <!-- the SDK client class talks to a native core; the core does not need it -->
-                  <excludes><exclude>com/gematik/pki/CertificateVerifier.java</exclude></excludes>
+                  <excludes>
+                    <exclude>com/gematik/pki/CertificateVerifier.java</exclude>
+                    <!-- the app-side runtime that wabi-wit-gen writes next to the SDK -->
+                    <exclude>com/gematik/pki/runtime/**</exclude>
+                  </excludes>
                 </resource>
                 <resource>
-                  <directory>${project.basedir}/../../../runtime/java</directory>
+                  <directory>${project.basedir}/../generated/java</directory>
                   <includes>
-                    <include>com/acme/client/runtime/MsgPack*.java</include>
-                    <include>com/acme/client/runtime/Acme*Exception.java</include>
+                    <include>com/gematik/pki/runtime/MsgPack*.java</include>
+                    <include>com/gematik/pki/runtime/Wabi*Exception.java</include>
                   </includes>
                 </resource>
               </resources>

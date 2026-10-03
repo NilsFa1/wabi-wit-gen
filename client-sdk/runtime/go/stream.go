@@ -1,4 +1,4 @@
-package acmeabi
+package wabiabi
 
 import (
 	"sync"
@@ -60,51 +60,60 @@ func (s *stream) next() (uint64, int32) {
 		return 0, ErrBusy
 	}
 	f, ctx := newFuture()
+	f.deferredCancel = true // set before the handle is returned to the host
 	if s.stopped() {
-		s.busy.Store(false)
-		f.complete(StreamEnd, nil)
+		s.finishPull(f, StreamEnd, nil)
 		return f.handle, OK
 	}
-	s.mu.Lock()
-	if len(s.leftover) > 0 {
-		item := s.leftover[0]
-		s.leftover = s.leftover[1:]
-		s.mu.Unlock()
-		s.busy.Store(false)
-		f.complete(OK, item)
-		return f.handle, OK
-	}
-	s.mu.Unlock()
 	go func() {
 		var status int32
 		var item []byte
-		select {
-		case it, ok := <-s.items:
-			switch {
-			case ok:
-				status, item = OK, it
-			case s.stopped():
-				// cancel also closes `items`; select picks randomly among ready
-				// cases, so a pull pending at cancel time must still report
-				// CANCELLED, not END (ABI.md §8).
-				status = ErrCancelled
-			default:
-				status = StreamEnd
-			}
-		case <-s.stop:
+		if s.stopped() {
+			// This pull was issued before stream cancellation, even if its
+			// worker starts afterwards. Only later pulls report stream end.
 			status = ErrCancelled
-		case <-ctx.Done(): // this pull was cancelled; nothing consumed
-			s.busy.Store(false)
-			return
+		} else {
+			s.mu.Lock()
+			if len(s.leftover) > 0 {
+				item = s.leftover[0]
+				s.leftover = s.leftover[1:]
+				status = OK
+				s.mu.Unlock()
+			} else {
+				s.mu.Unlock()
+				select {
+				case it, ok := <-s.items:
+					switch {
+					case ok:
+						status, item = OK, it
+					case s.stopped():
+						status = ErrCancelled
+					default:
+						status = StreamEnd
+					}
+				case <-s.stop:
+					status = ErrCancelled
+				case <-ctx.Done():
+					status = ErrCancelled
+				}
+			}
 		}
-		s.busy.Store(false)
-		if !f.complete(status, item) && status == OK {
-			s.mu.Lock() // cancel won the race after we dequeued: keep the item
-			s.leftover = append(s.leftover, item)
-			s.mu.Unlock()
-		}
+		s.finishPull(f, status, item)
 	}()
 	return f.handle, OK
+}
+
+// Finalize the winning outcome and any leftover before notifying the host.
+// A callback (including cancellation) may immediately start the next pull.
+func (s *stream) finishPull(f *future, status int32, item []byte) {
+	f.completeWith(status, item, func(accepted bool) {
+		if !accepted && status == OK {
+			s.mu.Lock()
+			s.leftover = append([][]byte{item}, s.leftover...)
+			s.mu.Unlock()
+		}
+		s.busy.Store(false)
+	})
 }
 
 func (s *stream) stopped() bool {

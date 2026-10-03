@@ -1,6 +1,6 @@
 // Plain application code against the generated Java SDK. Which core runs
 // underneath (Rust, Go, Zig) is decided by the native library — not here.
-import com.acme.client.*;
+import com.wabi.client.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -10,7 +10,7 @@ import java.util.concurrent.Flow;
 public final class Example {
     public static void main(String[] args) throws Exception {
         var options = new ClientOptions(args.length > 0 ? args[0] : "mem://example", Optional.of("demo-key"), 5_000);
-        try (var client = new AcmeClient(options)) {
+        try (var client = new WabiClient(options)) {
             var gotMessage = new CompletableFuture<Void>();
             client.events().subscribe(new Flow.Subscriber<>() {
                 Flow.Subscription s;
