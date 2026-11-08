@@ -14,9 +14,6 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: client-sdk
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,9 +27,9 @@ jobs:
           have=$(sed -n 's/^version = "\(.*\)"/\1/p' generator/Cargo.toml | head -1)
           [ "$want" = "$have" ] || { echo "tag $want != generator/Cargo.toml $have"; exit 1; }
       - run: generator/npm/build.sh
-      - run: generator/npm/test.sh
+      - run: generator/npm/test/run.sh
       - name: publish
-        working-directory: client-sdk/generator/npm
+        working-directory: generator/npm
         run: npm publish --provenance --access public nfails-wabi-wit-gen-*.tgz
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

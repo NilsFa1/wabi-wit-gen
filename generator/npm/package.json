@@ -1,0 +1,45 @@
+{
+  "name": "@nfails/wabi-wit-gen",
+  "version": "0.1.0",
+  "description": "WIT → SDKs (C#, Java/Android, Swift, Dart/Flutter, TypeScript/Bun) + core glue (Rust, Go, C#) over one stable native ABI. Runs as WebAssembly: no native install.",
+  "keywords": [
+    "wit",
+    "component-model",
+    "ffi",
+    "codegen",
+    "sdk",
+    "native-abi",
+    "flutter",
+    "jni",
+    "swift",
+    "bun"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NilsFa1/UniWtiGen.git",
+    "directory": "generator/npm"
+  },
+  "type": "module",
+  "bin": {
+    "wabi-wit-gen": "bin/wabi-wit-gen.mjs"
+  },
+  "files": [
+    "bin/",
+    "wabi-wit-gen.wasm",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.1"
+  },
+  "scripts": {
+    "build": "./build.sh",
+    "test": "./test/run.sh"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

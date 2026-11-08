@@ -1,8 +1,0 @@
-sdk/
-feed/
-core/target/
-core/Cargo.lock
-dart_app/.dart_tool/
-dart_app/pubspec.lock
-dotnet_app/bin/
-dotnet_app/obj/

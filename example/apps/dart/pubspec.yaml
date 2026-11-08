@@ -1,0 +1,8 @@
+name: demo_example
+publish_to: none
+environment:
+  sdk: ">=3.10.0 <4.0.0"
+dependencies:
+  pointycastle: ^3.9.0 # the app's key (lib/app_keys.dart)
+  demo_client:
+    path: ../../sdk/dart

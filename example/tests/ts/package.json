@@ -1,0 +1,15 @@
+{
+  "name": "demo-client-tests",
+  "description": "The TypeScript tests of the example, on the generated SDK package (../../sdk/ts).",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@noble/curves": "^1.9.0",
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.6.0"
+  }
+}

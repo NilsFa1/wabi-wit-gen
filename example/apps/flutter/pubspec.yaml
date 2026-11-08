@@ -1,0 +1,35 @@
+name: demo_flutter_example
+description: >-
+  Flutter app using the example SDK. The core library is bundled by the
+  generated SDK's build hook (Dart native assets): no jniLibs, xcframework, DLL or dylib
+  to copy by hand.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.10.0 <4.0.0"
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  demo_client:
+    path: ../../sdk/dart
+  pointycastle: ^3.9.0 # the app's key (lib/app_keys.dart)
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+# Configuration of the SDK's build hook (docs/FLUTTER.md). Without prebuilt_dir
+# the SDK looks in example/sdk/native (example/sdk/core-rust/build-native.sh).
+hooks:
+  user_defines:
+    demo_client:
+      required: true # a missing core library fails the build instead of the app start

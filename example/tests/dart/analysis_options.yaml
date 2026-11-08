@@ -1,0 +1,4 @@
+include: package:lints/recommended.yaml
+analyzer:
+  errors:
+    implementation_imports: ignore # the tests look into the generated code (codec, ABI constants)

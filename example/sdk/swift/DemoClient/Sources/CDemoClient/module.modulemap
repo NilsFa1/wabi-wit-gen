@@ -1,0 +1,5 @@
+module CDemoClient [system] {
+    header "shim.h"
+    link "demo_client"
+    export *
+}

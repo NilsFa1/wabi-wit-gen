@@ -1,17 +1,21 @@
 # Rust
 target/
-# .NET build output (scoped: `bin/` alone would also hide core-rust/src/bin)
-client-sdk/**/bin/Debug/
-client-sdk/**/bin/Release/
-client-sdk/**/obj/
+# .NET build output (scoped: `bin/` alone would also hide example/core-rust/src/bin)
+**/bin/Debug/
+**/bin/Release/
+**/obj/
 # Java / generic build output
 *.class
-/client-sdk/build/
-# Zig
-.zig-cache/
-zig-out/
+/example/build/
+/example/sdk/java/build/
+# native cores built by sdk/core-*/build-native.sh
+/example/sdk/native/
+# C
 *.o
 # Dart
 .dart_tool/
-client-sdk/sdk/dart/pubspec.lock
-client-sdk/examples/dart/pubspec.lock
+pubspec.lock
+# Swift
+.build/
+# JS
+node_modules/

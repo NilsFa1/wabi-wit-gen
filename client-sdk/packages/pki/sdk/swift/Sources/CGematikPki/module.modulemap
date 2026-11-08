@@ -1,5 +1,0 @@
-module CGematikPki [system] {
-    header "shim.h"
-    link "gematik_pki"
-    export *
-}

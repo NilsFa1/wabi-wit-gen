@@ -1,0 +1,148 @@
+/// The example contract of this repository: a small HTTP client whose request
+/// and response bodies are encrypted and whose requests are signed with a key
+/// that never leaves the app.
+///
+/// This file is the single source of truth. Everything else is derived from it:
+///   * the numeric wire identifiers (pinned in `abi-ids.lock`, never by order),
+///   * the C#, Java, Swift, Dart and TypeScript SDK surface,
+///   * the dispatch/codec layer of every native core (Rust and Go here),
+///   * optionally a WebAssembly component (`client.component.wasm`) that uses the
+///     standard Canonical ABI instead of the Wabi native ABI.
+///
+/// Evolution rules (enforced by `wabi-wit-gen --check`):
+///   * never rename or remove a published function, field or case — deprecate it,
+///   * new record fields must be `option<T>` (old peers simply do not send them),
+///   * new variant/enum cases are allowed; old SDKs surface them as protocol errors,
+///   * reordering anything in this file is always safe (IDs come from the lock file).
+package demo:client@1.0.0;
+
+interface types {
+    /// A customer as returned by the backend.
+    record customer {
+        id: string,
+        name: string,
+        email: option<string>,
+    }
+
+    /// Every error a client operation can fail with.
+    variant client-error {
+        not-found,
+        unauthorized,
+        disconnected,
+        network-error(string),
+        protocol-error(string),
+        /// The app-held signing key is unknown or could not be used.
+        key-error(string),
+    }
+
+    /// Lifecycle of the session with the backend.
+    enum connection-state {
+        disconnected,
+        connecting,
+        connected,
+    }
+
+    /// Construction options for a client.
+    record client-options {
+        /// `http://host:port` for a real backend, `mem://<name>` for the
+        /// in-process mock backend used by tests and examples.
+        endpoint: string,
+        /// Shared secret. The key that encrypts every request and response
+        /// body (AES-256-GCM) is derived from it; it never travels over the wire.
+        api-key: option<string>,
+        /// Per-request timeout in milliseconds (0 = no timeout).
+        request-timeout-ms: u32,
+        /// Name of an EC P-256 key held by the app (see `host-keys`). If set,
+        /// every request is signed with it and the session is bound to it.
+        key-id: option<string>,
+    }
+
+    /// An opaque command that is forwarded to the backend.
+    record command {
+        name: string,
+        payload: list<u8>,
+    }
+
+    record command-result {
+        name: string,
+        payload: list<u8>,
+    }
+
+    /// Events pushed by the backend or by the session itself.
+    variant client-event {
+        customer-updated(customer),
+        connection-state-changed(connection-state),
+        message-received(string),
+    }
+}
+
+/// Implemented by the APP, called by the core (a "host call"). The private key
+/// stays where the platform keeps it: Secure Enclave, Android Keystore, TPM, HSM.
+interface host-keys {
+    use types.{client-error};
+
+    /// SubjectPublicKeyInfo (DER) of the EC P-256 key `key-id`.
+    public-key: func(key-id: string) -> result<list<u8>, client-error>;
+
+    /// ECDSA P-256 signature (ASN.1 DER, as platform keystores return it)
+    /// over the given SHA-256 digest.
+    sign: func(key-id: string, digest: list<u8>) -> result<list<u8>, client-error>;
+}
+
+interface api {
+    use types.{customer, client-error, connection-state, client-options, command, command-result, client-event};
+
+    /// The HTTP connection pool to one backend. A client normally has its own;
+    /// clients that are given the same transport share one pool.
+    resource transport {
+        constructor(endpoint: string);
+
+        /// HTTP requests sent over this transport so far, by all its clients.
+        request-count: func() -> u64;
+
+        /// A new client that sends its requests over this transport
+        /// (`options.endpoint` is ignored).
+        open-client: func(options: client-options) -> client;
+
+        /// Takes over `other`: its request count is added to this one, and
+        /// `other` is gone afterwards (the object moves into the core).
+        absorb: func(other: transport);
+    }
+
+    /// One session with the backend. Requests are plain HTTP requests with
+    /// encrypted bodies; events arrive over one long-lived response
+    /// (server-sent events) that `connect` opens.
+    resource client {
+        constructor(options: client-options);
+
+        /// Current session state (synchronous, never blocks on I/O).
+        state: func() -> connection-state;
+
+        /// Sends this client's requests over `transport` from the next
+        /// `connect` on. The transport is only borrowed for the call.
+        use-transport: func(transport: borrow<transport>);
+
+        /// Opens a session and its event channel. With a `key-id` the core asks
+        /// the app for the public key and for one signature per request.
+        connect: async func() -> result<_, client-error>;
+        disconnect: async func() -> result<_, client-error>;
+
+        /// Asks the backend which key signed this request: hex SHA-256 of its
+        /// SubjectPublicKeyInfo. `unauthorized` for a session without a key.
+        key-fingerprint: async func() -> result<string, client-error>;
+
+        get-customer: async func(id: string) -> result<customer, client-error>;
+        create-customer: async func(name: string, email: option<string>) -> result<customer, client-error>;
+
+        send-command: async func(command: command) -> result<command-result, client-error>;
+
+        /// Long-lived stream of events. Every call opens an independent
+        /// subscription; dropping/cancelling it does not affect other ones.
+        events: func() -> stream<client-event>;
+    }
+}
+
+world client-sdk {
+    import host-keys;
+    export api;
+}

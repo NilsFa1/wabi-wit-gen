@@ -1,0 +1,49 @@
+[package]
+name = "demo-client-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Example core in Rust: an HTTP client with encrypted bodies and host-signed requests, behind the Wabi native ABI"
+publish = false
+
+[lib]
+# libdemo_client.so / libdemo_client.dylib / demo_client.dll (+ .a for iOS xcframework)
+name = "demo_client"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[[bin]]
+name = "demo-mock-server"
+path = "src/bin/mock_server.rs"
+required-features = ["mock-server"]
+
+[features]
+default = ["mock-backend"]
+# The mock service in-process, behind `mem://` endpoints (tests, examples, CI).
+mock-backend = ["dep:p256"]
+# The mock service over real HTTP: the `demo-mock-server` binary.
+mock-server = ["mock-backend", "dep:axum"]
+
+[dependencies]
+# Contract-agnostic ABI runtime (handles, futures, streams, codec, host calls, exports),
+# written by wabi-wit-gen next to the generated glue
+wabi-abi-rt = { path = "../sdk/core-rust/wabi-abi-rt" }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "net"] }
+tokio-util = "0.7"
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures = "0.3"
+# Plain HTTP only: enable a TLS feature (e.g. "rustls-tls") for https:// endpoints.
+reqwest = { version = "0.12", default-features = false, features = ["stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+aes-gcm = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+getrandom = "0.3"
+p256 = { version = "0.13", optional = true }
+axum = { version = "0.8", optional = true, default-features = false, features = ["http1", "tokio"] }
+
+[profile.release]
+# catch_unwind at the FFI boundary requires unwinding panics.
+panic = "unwind"
+lto = "thin"

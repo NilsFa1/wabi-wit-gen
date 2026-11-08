@@ -1,0 +1,55 @@
+# Wabi wire-identifier lock file — maintained by wabi-wit-gen, commit it.
+#
+# Pins every numeric identifier that appears on the native ABI or in a payload
+# (method ids, record field tags, variant/enum case tags). It is APPEND-ONLY:
+#   * new WIT items get the next free number in their scope,
+#   * existing entries are never renumbered, so reordering the WIT is safe,
+#   * an id stands for one wire shape (last column): a method whose parameter
+#     or result types change, or a field/case whose type changes, gets a NEW
+#     id and its old one is retired,
+#   * removed items stay here as `retired`; their number is never reused,
+#   * `wabi-wit-gen --check` (CI) fails if this file would change.
+#
+# kind     qualified-name                                     id      shape
+field      demo:client/types.customer.id                            1       string
+field      demo:client/types.customer.name                          2       string
+field      demo:client/types.customer.email                         3       option<string>
+case       demo:client/types.client-error.not-found                 1       _
+case       demo:client/types.client-error.unauthorized              2       _
+case       demo:client/types.client-error.disconnected              3       _
+case       demo:client/types.client-error.network-error             4       string
+case       demo:client/types.client-error.protocol-error            5       string
+case       demo:client/types.client-error.key-error                 6       string
+case       demo:client/types.connection-state.disconnected          1       _
+case       demo:client/types.connection-state.connecting            2       _
+case       demo:client/types.connection-state.connected             3       _
+field      demo:client/types.client-options.endpoint                1       string
+field      demo:client/types.client-options.api-key                 2       option<string>
+field      demo:client/types.client-options.request-timeout-ms      3       u32
+field      demo:client/types.client-options.key-id                  4       option<string>
+field      demo:client/types.command.name                           1       string
+field      demo:client/types.command.payload                        2       bytes
+field      demo:client/types.command-result.name                    1       string
+field      demo:client/types.command-result.payload                 2       bytes
+case       demo:client/types.client-event.customer-updated          1       named<customer>
+case       demo:client/types.client-event.connection-state-changed  2       named<connection-state>
+case       demo:client/types.client-event.message-received          3       string
+group      demo:client/host-keys                                    0x01
+method     demo:client/host-keys.public-key                         0x0101  sync(string)->result<bytes,named<client-error>>
+method     demo:client/host-keys.sign                               0x0102  sync(string,bytes)->result<bytes,named<client-error>>
+group      demo:client/api.client                                   0x02
+method     demo:client/api.client.constructor                       0x0200  sync(named<client-options>)->_
+method     demo:client/api.client.state                             0x0201  sync()->named<connection-state>
+method     demo:client/api.client.connect                           0x0202  async()->result<_,named<client-error>>
+method     demo:client/api.client.disconnect                        0x0203  async()->result<_,named<client-error>>
+method     demo:client/api.client.key-fingerprint                   0x0204  async()->result<string,named<client-error>>
+method     demo:client/api.client.get-customer                      0x0205  async(string)->result<named<customer>,named<client-error>>
+method     demo:client/api.client.create-customer                   0x0206  async(string,option<string>)->result<named<customer>,named<client-error>>
+method     demo:client/api.client.send-command                      0x0207  async(named<command>)->result<named<command-result>,named<client-error>>
+method     demo:client/api.client.events                            0x0208  sync()->stream<named<client-event>>
+group      demo:client/api.transport                                0x03
+method     demo:client/api.transport.constructor                    0x0300  sync(string)->_
+method     demo:client/api.transport.request-count                  0x0301  sync()->u64
+method     demo:client/api.transport.open-client                    0x0302  sync(named<client-options>)->own<client>
+method     demo:client/api.transport.absorb                         0x0303  sync(own<transport>)->_
+method     demo:client/api.client.use-transport                     0x0209  sync(borrow<transport>)->_

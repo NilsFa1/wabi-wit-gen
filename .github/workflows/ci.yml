@@ -1,0 +1,197 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-matrix:
+    # Generator and runtime tests, Rust core tests, and the compatibility matrix:
+    # C suites (ABI conformance, host calls) + the unchanged C#, Java, Dart and
+    # TypeScript test suites against the Rust core, the Go core and the C# core.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: "8.0.x" }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "25" }
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.26" }
+      - uses: dart-lang/setup-dart@v1
+      - uses: oven-sh/setup-bun@v2 # TypeScript SDK (bun:ffi)
+      - run: (cd example/sdk/dart && dart pub get && dart analyze --fatal-infos)
+      - run: (cd example/tests/dart && dart pub get && dart analyze --fatal-infos)
+      - run: (cd example/apps/dart && dart pub get && dart analyze --fatal-infos)
+      # host_calls.c uses OpenSSL as the app keystore; the C# core (NativeAOT) links with clang and zlib
+      - run: sudo apt-get update && sudo apt-get install -y libssl-dev clang zlib1g-dev
+      - run: scripts/test-all.sh
+
+  swift-macos:
+    # Swift (and the Security framework as keystore for host calls) needs macOS.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --manifest-path example/core-rust/Cargo.toml
+      - name: swift test + app against the Rust core (generated SwiftPM package)
+        run: |
+          LIB=$GITHUB_WORKSPACE/example/core-rust/target/release
+          (cd example/tests/swift && swift test -Xlinker -L$LIB -Xlinker -rpath -Xlinker $LIB)
+          (cd example/apps/swift && swift run -Xlinker -L$LIB -Xlinker -rpath -Xlinker $LIB DemoExample)
+      - uses: oven-sh/setup-bun@v2
+      - name: TypeScript/Bun (bun:ffi, AAPCS64 calling convention)
+        working-directory: example/tests/ts
+        run: |
+          bun install --frozen-lockfile && bun x tsc --noEmit
+          WABI_NATIVE_LIB=$GITHUB_WORKSPACE/example/core-rust/target/release/libdemo_client.dylib bun test
+
+  bun-windows:
+    # The TypeScript SDK passes wabi_bytes/wabi_buffer by reference on Win64
+    # (by value in two registers on SysV/AAPCS64): verify that path natively.
+    runs-on: windows-latest
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+      - run: cargo build --release --lib --manifest-path example/core-rust/Cargo.toml
+      - name: TypeScript/Bun on Windows
+        working-directory: example/tests/ts
+        run: |
+          bun install --frozen-lockfile && bun x tsc --noEmit
+          WABI_NATIVE_LIB="$(cygpath -w "$GITHUB_WORKSPACE/example/core-rust/target/release/demo_client.dll")" bun test
+
+  wabi-wit-gen-npm:
+    # The generator as WebAssembly in the npm package wabi-wit-gen: --check on the
+    # example, output byte-equal to the native build,
+    # and a project from scratch (WIT -> Rust core via the generated build-native.sh
+    # -> Bun, Dart package with build hook, NuGet package), on every OS (Windows:
+    # drive mapping of the WASI launcher, MSVC core build).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run: { shell: bash }
+    steps:
+      # --check compares byte for byte: keep LF line endings on Windows too.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-wasip1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: oven-sh/setup-bun@v2
+      - uses: dart-lang/setup-dart@v1 # Dart package with build hook
+      - uses: actions/setup-dotnet@v4 # NuGet package
+        with: { dotnet-version: "8.0.x" }
+      - run: generator/npm/build.sh
+      - run: generator/npm/test/run.sh
+
+  # Flutter: the SDK's build hook (Dart native assets) bundles the core; the example
+  # app has no manual native setup. Platform projects are created on the fly.
+  flutter-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build libgtk-3-dev xvfb
+      - run: bash example/sdk/core-rust/build-native.sh example/core-rust host
+      - name: flutter analyze + widget test (host) + integration test (Linux desktop)
+        working-directory: example/apps/flutter
+        run: |
+          flutter create --platforms=linux .
+          flutter analyze
+          flutter test
+          xvfb-run -a flutter test integration_test -d linux
+          flutter build linux --release
+          test -f build/linux/x64/release/bundle/lib/libdemo_client.so
+
+  flutter-android:
+    runs-on: ubuntu-24.04
+    steps:
+      # NDK builds + Gradle + the emulator system image exceed the runner's free disk
+      - name: free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/share/powershell && df -h /
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-ndk --locked
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - run: ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME bash example/sdk/core-rust/build-native.sh example/core-rust android
+      - name: flutter build apk (arm64-v8a, armeabi-v7a, x86_64)
+        working-directory: example/apps/flutter
+        run: |
+          flutter create --platforms=android .
+          flutter build apk --debug
+          unzip -l build/app/outputs/flutter-apk/app-debug.apk | grep libdemo_client.so
+      - run: rm -rf example/core-rust/target && df -h / # the emulator image needs the space
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: integration test on the x86_64 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          working-directory: example/apps/flutter
+          script: flutter test integration_test -d emulator-5554
+
+  flutter-apple:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - run: bash example/sdk/core-rust/build-native.sh example/core-rust macos ios
+      - name: macOS desktop
+        working-directory: example/apps/flutter
+        run: |
+          flutter create --platforms=macos,ios .
+          flutter test integration_test -d macos
+      - name: iOS simulator
+        working-directory: example/apps/flutter
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          xcrun simctl boot "$UDID"
+          flutter test integration_test -d "$UDID"
+          flutter build ios --no-codesign
+
+  flutter-windows:
+    runs-on: windows-latest
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - run: bash example/sdk/core-rust/build-native.sh example/core-rust windows-x64
+      - name: Windows desktop
+        working-directory: example/apps/flutter
+        run: |
+          flutter create --platforms=windows .
+          flutter test integration_test -d windows
+
+  native-artifacts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pip install ziglang==0.16.0 # cross linker for linux-arm64 and windows-x64
+      - run: bash example/sdk/core-rust/build-native.sh example/core-rust linux-x64 linux-arm64 windows-x64
+      - uses: actions/upload-artifact@v4
+        with: { name: native, path: example/sdk/native }
