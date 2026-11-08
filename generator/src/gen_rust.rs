@@ -589,3 +589,30 @@ fn emit_dispatch(o: &mut String, m: &Model) {
     w!(o, "    }}");
     w!(o, "}}");
 }
+
+/// Editable implementation skeleton; generated only on explicit scaffolding.
+pub fn scaffold(m: &Model) -> String {
+    let mut o = String::from("// Starter implementation: edit freely; never overwritten by the generator.\n#![allow(unused)]\n#[path = \"../generated.rs\"] pub mod generated;\nuse generated::*;\nuse std::sync::Arc;\nuse wabi_abi_rt::host::AbiStream;\n\npub struct Core;\nimpl Implementation for Core {\n");
+    w!(o, "    const CORE_INFO: &'static std::ffi::CStr = c\"{} starter (unimplemented)\";", m.contract_id());
+    for r in &m.resources { w!(o, "    type {} = {}Impl;", pascal(&r.name), pascal(&r.name)); }
+    w!(o, "}}");
+    for r in &m.resources {
+        let name = pascal(&r.name);
+        w!(o, "pub struct {name}Impl;");
+        w!(o, "impl {name}Resource for {name}Impl {{");
+        for other in r.handle_resources().iter().filter(|n| **n != r.name) {
+            w!(o, "    type {0} = {0}Impl;", pascal(other));
+        }
+        if let Some(c) = &r.ctor {
+            let ps = c.params.iter().map(|(n,t)| format!("{}: {}", snake(n), rty(t))).collect::<Vec<_>>().join(", ");
+            w!(o, "    fn new({ps}) -> Self {{ Self }}");
+        }
+        for f in &r.methods {
+            let a = if f.is_async { "async " } else { "" };
+            w!(o, "    {a}fn {}(&self{}) -> {} {{ todo!(\"implement {}.{}\") }}", snake(&f.name), params_sig(f), ret_ty(&f.ret), r.name, f.name);
+        }
+        w!(o, "}}");
+    }
+    for r in &m.resources { let n = pascal(&r.name); o = o.replace(&format!("Arc<Self::{n}>"), &format!("Arc<{n}Impl>")); }
+    o
+}

@@ -78,7 +78,7 @@ pub fn emit(lang: &str, m: &Model, abi_from_jni: &str) -> Vec<(String, String)> 
             "ts" => (format!("runtime/{rel}"), text.replace("\"../generated/", "\"../")),
             other => unreachable!("no embedded runtime for {other}"),
         };
-        let text = banner(&file.0, &file.1);
+        let text = banner(&file.0, &file.1.replace("@LIBRARY@", &m.symbol_prefix()));
         out.push((file.0, text));
     }
     out
@@ -131,7 +131,7 @@ fn java(m: &Model, rel: &str, text: &str, abi_from_jni: &str) -> (String, String
     let dir = pkg.replace('.', "/");
     let lib = jni_library(m);
     let common = |t: &str| {
-        t.replace(&jni_ref_prefix(), &format!("Java_{}_", jni_mangle(&format!("{pkg}.JniAbi"))))
+        t.replace("@JNI_CLASS@", &jni_mangle(&format!("{pkg}.JniAbi")))
             .replace(REF_JAVA_PKG, &pkg)
             .replace(&REF_JAVA_PKG.replace('.', "/"), &dir)
             .replace("wabi_jni", &lib)
@@ -149,10 +149,6 @@ fn java(m: &Model, rel: &str, text: &str, abi_from_jni: &str) -> (String, String
         return (format!("jni/{name}"), text);
     }
     panic!("unexpected Java runtime file {rel}");
-}
-
-fn jni_ref_prefix() -> String {
-    format!("Java_{}_", jni_mangle(&format!("{REF_JAVA_PKG}.JniAbi")))
 }
 
 #[cfg(test)]

@@ -3,12 +3,12 @@
  *
  * Hand-written, contract-agnostic: it knows the 17 ABI functions of
  * abi/wabi_abi_functions.h and nothing about customers, clients or method ids.
- * The package's symbol prefix ("wabi_client_") is passed in at run time; new
+ * The package's symbol prefix ("@LIBRARY@_") is passed in at run time; new
  * WIT functions never require changes. wabi-wit-gen copies it into every
- * package (generated/java/jni) with the package's library name and JNI class,
+ * package (java/jni) with the package's library name and JNI class,
  * so the shims of two SDKs can be loaded into one process.
  *
- *   Java (JniAbi)  --JNI-->  libwabi_jni  --dlopen/function table-->  libwabi_client (Rust/Go/...)
+ *   Java (JniAbi)  --JNI-->  libwabi_jni  --dlopen/function table-->  lib@LIBRARY@ (Rust/Go/...)
  *
  * Memory: request byte[]s are pinned/copied only for the duration of a call
  * (the core copies what it keeps, ABI.md §7); result buffers are copied into
@@ -208,7 +208,7 @@ static void unborrow(JNIEnv *env, borrowed *b) {
 
 /* ------------------------------------------------------------ natives */
 
-#define JNI_FN(ret, name) JNIEXPORT ret JNICALL Java_com_wabi_client_runtime_JniAbi_##name
+#define JNI_FN(ret, name) JNIEXPORT ret JNICALL Java_@JNI_CLASS@_##name
 
 JNI_FN(jlong, nOpen)(JNIEnv *env, jclass c, jstring jpath, jstring jprefix, jboolean metadata_only, jobjectArray error) {
     (void)c;
@@ -226,7 +226,7 @@ JNI_FN(jlong, nOpen)(JNIEnv *env, jclass c, jstring jpath, jstring jprefix, jboo
 #endif
         goto fail;
     }
-/* <prefix><name>, e.g. "wabi_client_" + "call_sync" (ABI.md §1.1) */
+/* <prefix><name>, e.g. "@LIBRARY@_" + "call_sync" (ABI.md §1.1) */
 #define SYM(field, name)                                                                   \
     snprintf(sym, sizeof sym, "%s%s", prefix, name);                                       \
     if (!(*(void **)&lib->field = LIB_SYM(lib->handle, sym))) {                             \

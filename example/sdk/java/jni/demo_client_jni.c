@@ -4,12 +4,12 @@
  *
  * Hand-written, contract-agnostic: it knows the 17 ABI functions of
  * abi/wabi_abi_functions.h and nothing about customers, clients or method ids.
- * The package's symbol prefix ("wabi_client_") is passed in at run time; new
+ * The package's symbol prefix ("demo_client_") is passed in at run time; new
  * WIT functions never require changes. wabi-wit-gen copies it into every
- * package (generated/java/jni) with the package's library name and JNI class,
+ * package (java/jni) with the package's library name and JNI class,
  * so the shims of two SDKs can be loaded into one process.
  *
- *   Java (JniAbi)  --JNI-->  libdemo_client_jni  --dlopen/function table-->  libwabi_client (Rust/Go/...)
+ *   Java (JniAbi)  --JNI-->  libdemo_client_jni  --dlopen/function table-->  libdemo_client (Rust/Go/...)
  *
  * Memory: request byte[]s are pinned/copied only for the duration of a call
  * (the core copies what it keeps, ABI.md §7); result buffers are copied into
@@ -227,7 +227,7 @@ JNI_FN(jlong, nOpen)(JNIEnv *env, jclass c, jstring jpath, jstring jprefix, jboo
 #endif
         goto fail;
     }
-/* <prefix><name>, e.g. "wabi_client_" + "call_sync" (ABI.md §1.1) */
+/* <prefix><name>, e.g. "demo_client_" + "call_sync" (ABI.md §1.1) */
 #define SYM(field, name)                                                                   \
     snprintf(sym, sizeof sym, "%s%s", prefix, name);                                       \
     if (!(*(void **)&lib->field = LIB_SYM(lib->handle, sym))) {                             \

@@ -1,9 +1,11 @@
 /*
- * wabi_abi_functions.h — the functions of the Wabi native ABI v1.1
- * (17 core functions + 2 optional host-call functions).
+ * wabi_abi_functions.h — the functions of the Wabi native ABI v1.2
+ * (17 core functions + 3 optional host-call functions).
  *
  * Every WIT package exports these functions under its own SYMBOL PREFIX,
  * derived from the package name (ABI.md §1.1):
+ *
+ * Examples only (use your own WIT package):
  *
  *     demo:client  ->  demo_client_call_sync, demo_client_future_take, ...
  *     geo:lib      ->  geo_lib_call_sync, ...

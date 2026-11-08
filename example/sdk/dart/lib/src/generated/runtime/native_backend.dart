@@ -63,7 +63,7 @@ final class CoreInfo {
   static CoreInfo probe(String libraryPath) {
     final lib = NativeBackend._open(libraryPath);
     try {
-      const p = Contract.symbolPrefix; // wabi_client_abi_version, ... (ABI.md §1.1)
+      const p = Contract.symbolPrefix; // demo_client_abi_version, ... (ABI.md §1.1)
       final version = lib.lookupFunction<Uint32 Function(), int Function()>('${p}abi_version');
       final caps = lib.lookupFunction<Uint64 Function(), int Function()>('${p}abi_capabilities');
       final contract = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('${p}contract_id');
@@ -92,8 +92,8 @@ final class NativeBackend implements ClientBackend {
   /// 2. the package's native code asset from `hook/build.dart` (Dart native
   ///    assets: Flutter and `dart run`/`dart test` bundle it automatically),
   ///    or the same symbols linked into the process (iOS xcframework),
-  /// 3. the naming convention `libwabi_client.so` (Linux/Android jniLibs),
-  ///    `wabi_client.dll`, `libwabi_client.dylib` for manually bundled libraries.
+  /// 3. the naming convention `libdemo_client.so` (Linux/Android jniLibs),
+  ///    `demo_client.dll`, `libdemo_client.dylib` for manually bundled libraries.
   static NativeBackend get shared => _shared ??= NativeBackend._(_bindDefault());
 
   static NativeAbi _bindDefault() {
@@ -126,7 +126,7 @@ final class NativeBackend implements ClientBackend {
 
   static String? _conventionalPath() {
     if (Platform.isIOS) return null; // DynamicLibrary.process()
-    const name = Contract.library; // derived from the WIT package, e.g. wabi_client
+    const name = Contract.library; // derived from the WIT package, e.g. demo_client
     if (Platform.isMacOS) return 'lib$name.dylib';
     if (Platform.isWindows) return '$name.dll';
     return 'lib$name.so';

@@ -4,7 +4,7 @@
 // linked against any core that implements the Wabi native ABI as libdemo_client.
 //
 // macOS/Linux: `swift build -Xlinker -L<dir with libdemo_client>` in the package that uses this one.
-// iOS: replace the system library by the xcframework that build-native.sh writes:
+// iOS: replace the system library by a compatible xcframework (see ../../README.md):
 //      .binaryTarget(name: "CDemoClient", path: "../../native/apple/DemoClient.xcframework")
 import PackageDescription
 

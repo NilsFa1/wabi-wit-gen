@@ -21,7 +21,7 @@ const nativeAbiAssetName = 'src/generated/native_abi.dart';
 const checksumFile = 'native/SHA256SUMS';
 
 /// Runs the build hook of an SDK package whose core library is called
-/// [library] (e.g. `wabi_client` -> `libwabi_client.so`, `wabi_client.dll`).
+/// [library] (e.g. `@LIBRARY@` -> `lib@LIBRARY@.so`, `@LIBRARY@.dll`).
 ///
 /// The library comes from the first of these that is configured, in the
 /// app's `pubspec.yaml`:
@@ -29,8 +29,8 @@ const checksumFile = 'native/SHA256SUMS';
 /// ```yaml
 /// hooks:
 ///   user_defines:
-///     wabi_client:                  # the SDK package
-///       library: ../core/target/release/libwabi_client.so   # 1. one file (host builds)
+///     @LIBRARY@:                  # the SDK package
+///       library: ../core/target/release/lib@LIBRARY@.so   # 1. one file (host builds)
 ///       prebuilt_dir: ../build/native                        # 2. per-target layout, below
 ///       release_url: https://example.org/releases/v1.0.0    # 3. download, checked against native/SHA256SUMS
 /// ```
@@ -42,7 +42,7 @@ const checksumFile = 'native/SHA256SUMS';
 /// to make that a build error instead.
 ///
 /// Layout of a prebuilt directory and of a release (`<dir>/<target>/<file>`),
-/// as produced by `scripts/build-native.sh` or a core's own build script;
+/// as produced by the chosen core's build process (see the SDK README.md);
 /// the first existing candidate wins:
 ///
 /// | target | candidates |
@@ -155,7 +155,7 @@ Uri _asDirectory(Uri dir) => dir.path.endsWith('/') ? dir : dir.replace(path: '$
 
 /// Flutter builds Apple targets per architecture and merges the assets with
 /// `lipo -create`, which fails for two universal inputs. A universal (fat)
-/// Mach-O library such as `osx/libwabi_client.dylib` is therefore reduced to
+/// Mach-O library such as `osx/lib@LIBRARY@.dylib` is therefore reduced to
 /// the target architecture.
 Future<Uri> _thin(BuildInput input, CodeConfig code, Uri library, String file) async {
   if (code.targetOS != OS.macOS && code.targetOS != OS.iOS) return library;

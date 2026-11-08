@@ -251,7 +251,7 @@ pub fn emit_c_header(m: &crate::ir::Model) -> String {
     w!(o, " *");
     w!(o, " * Native ABI bindings of package {} (symbol prefix `{prefix}_`).", m.contract_id());
     w!(o, " * Normative definitions: abi/wabi_abi.h, abi/wabi_abi_functions.h, abi/ABI.md.");
-    w!(o, " * Compile with -I<repo>/abi (or put wabi_abi.h next to this file). */");
+    w!(o, " * Compile with -I<SDK-output>/abi (or put wabi_abi.h next to this file). */");
     w!(o, "#ifndef {upper}_WABI_BINDINGS_H");
     w!(o, "#define {upper}_WABI_BINDINGS_H");
     w!(o, "");

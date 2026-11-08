@@ -1,6 +1,6 @@
 // Hand-written, generic: AbiCalls via JNI, for Android (no Panama) and JDK 17+.
 //
-// The C side is generated/java/jni/wabi_jni.c of this package: a small,
+// The C side is java/jni/wabi_jni.c of this package: a small,
 // contract-agnostic shim (libwabi_jni, named after the package so two SDKs can
 // share a process) that dlopen()s the core and forwards the 17 ABI functions.
 // Native memory never reaches Java: the shim copies results into byte[] and
@@ -182,7 +182,7 @@ final class JniAbi implements AbiCalls {
     // ----------------------------------------------------------- natives
     // `lib` is an opaque pointer to the shim's function table for one core.
 
-    /** {@code symbolPrefix}: e.g. "wabi_client_" — the shim itself is package-agnostic. */
+    /** {@code symbolPrefix}: e.g. "@LIBRARY@_" — the shim itself is package-agnostic. */
     static native long nOpen(String path, String symbolPrefix, boolean metadataOnly, String[] error);
     static native void nClose(long lib);
     static native int nAbiVersion(long lib);

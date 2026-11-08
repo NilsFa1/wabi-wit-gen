@@ -8,11 +8,12 @@ Normative Beschreibung von [`wabi_abi.h`](wabi_abi.h) (Typen, Konstanten) und
 [`wabi_abi_functions.h`](wabi_abi_functions.h) (die 17 Funktionen, dazu drei optionale für Host-Calls). Die ABI ist das
 **Implementierungsprotokoll** zwischen Sprach-SDKs (C#, Java, Swift, …) und
 einem nativen Core (Rust, Go, Zig, …). Sie ist **nicht** die öffentliche API —
-die steht ausschließlich im WIT-Vertrag (Beispiel: [`example/wit/client.wit`](../example/wit/client.wit)).
+die steht ausschließlich im WIT-Vertrag des jeweiligen Pakets.
+Die paketbezogene SDK-Anleitung liegt in der generierten Ausgabe unter `README.md`.
 
 Schlüsselwörter MUSS / DARF / SOLL im Sinne von RFC 2119.
-Konformität prüft [`example/tests/abi/conformance.c`](../example/tests/abi/conformance.c)
-(sprachneutral, lädt jeden Core des Beispiels per `dlopen`).
+Diese Spezifikation bestätigt keine Konformität eines Nutzerprojekts.
+Jeder Core muss mit eigenen ABI- und Integrationstests geprüft werden.
 
 ---
 
@@ -259,6 +260,9 @@ asynchron auf einem anderen Thread ankommen (Dart-Isolate, JS-Event-Loop),
 halten ihre Trampoline trotzdem für die Lebensdauer des Backends, weil ein
 bereits zugestellter Aufruf dort noch in der Warteschlange stehen kann.
 
+Generisches Beispiel für ein importiertes Interface `host-keys`; diese Namen
+gehören nicht zwingend zum Vertrag des Nutzerprojekts:
+
 | Sprache | App implementiert | Registrierung | Abbruch kommt an als |
 |---|---|---|---|
 | C# | `IHostKeys` (`Task<T>`, Domänenfehler als `ClientException`) | `ClientHost.Register(app)` bzw. `Register(client, app)` | `CancellationToken` (letzter Parameter) |
@@ -271,10 +275,8 @@ bereits zugestellter Aufruf dort noch in der Warteschlange stehen kann.
 | C# (Core, NativeAOT) | ruft `HostKeys.SignAsync(…, token)` | – | Token → `on_cancel` |
 
 Eine Registrierung für eine Instanz hat Vorrang vor der prozessweiten und endet
-mit der Instanz. Die Namen stammen aus dem Beispiel ([`example/`](../example)):
-Das importierte Interface `host-keys` signiert dort jeden HTTP-Request mit einem
-Schlüssel, der in der App bleibt. Protokolltest (sprachneutral):
-[`example/tests/abi/host_calls.c`](../example/tests/abi/host_calls.c).
+mit der Instanz. Im obigen Beispiel signiert das importierte Interface `host-keys` jeden HTTP-Request mit einem
+Schlüssel, der in der App bleibt. Dieses Verhalten muss ein eigener Host-Call-Integrationstest prüfen.
 
 ## 5. Payload-Encoding v1
 
@@ -432,7 +434,7 @@ fangen Panics (Rust `catch_unwind`, Go `recover`).
 ## 10. Stabile Method-IDs
 
 `method_id = (group << 8) | index`. Beides steht in
-`abi-ids.lock` neben der WIT-Datei (Beispiel: [`example/wit/abi-ids.lock`](../example/wit/abi-ids.lock)), das `wabi-wit-gen` pflegt:
+`abi-ids.lock` neben der WIT-Datei, das `wabi-wit-gen` pflegt:
 
 * Beim ersten Auftreten bekommt ein Element die **nächste freie Nummer** in
   seinem Scope (Methoden: pro Ressource; Felder/Cases: pro Typ) und wird in
@@ -449,7 +451,9 @@ fangen Panics (Rust `catch_unwind`, Go `recover`).
   unbekannter Case), statt Bytes einer anderen Form zu dekodieren. Parameternamen
   gehören nicht zur Form; kehrt man zu einer früheren Form zurück, gilt wieder
   deren ID. Ob eine solche Änderung erlaubt ist, entscheidet getrennt davon die
-  API-Baseline ([docs/API_COMPATIBILITY.md](../docs/API_COMPATIBILITY.md)).
+  API-Baseline: `--api-baseline <datei>` vergleicht die aktuelle API mit einem
+  gespeicherten Snapshot; `--api-baseline <datei> --write-api-baseline` legt ihn
+  ausdrücklich an. Eine freigegebene Baseline gehört in die Versionsverwaltung.
 * `wabi-wit-gen --check` schlägt in CI fehl, wenn Lock-Datei oder generierter
   Code veraltet sind.
 
@@ -468,6 +472,7 @@ ABI (langsamer, fehleranfällig).
 3. Future-Zustandsautomat mit „erster Übergang gewinnt“ (§4.1), Callback
    genau einmal, nie synchron aus Host-Aufrufen.
 4. Payload-Codec v1 (§5) und Dispatch `method_id → Implementierung`
-   (für Rust, Go, C# und Java generiert; siehe `example/core-rust/src/generated`).
+   (für Rust, Go und C# generiert; siehe den gewählten `core-<sprache>/`-Ordner).
 5. Panics/Exceptions an der Grenze abfangen → `WABI_ERR_INTERNAL`.
-6. `example/tests/abi/conformance.c` und `example/tests/compatibility/run.sh` grün.
+6. Eigene ABI-Konformitäts-, Kompatibilitäts- und SDK-Integrationstests ausführen.
+   Generierte Dateien allein belegen keine erfolgreiche Konformitätsprüfung.

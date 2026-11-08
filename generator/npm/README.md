@@ -21,7 +21,7 @@ Ohne Installation: `npx @nfails/wabi-wit-gen wit/ --out sdk …` bzw.
 Voraussetzung: Node.js ≥ 20 oder Bun. Ein vollständiges Beispiel (HTTP-Client mit
 verschlüsselten Bodies, Cores in Rust, Go und C#, Apps in allen fünf Sprachen, dazu
 ein Mock-Service) liegt im Repository unter
-[`example/`](https://github.com/NilsFa1/UniWtiGen/tree/main/example).
+[`example/`](https://github.com/NilsFa1/wabi-wit-gen/tree/main/example).
 
 ## Vertrag
 
@@ -188,3 +188,50 @@ Go, C#) bringen das mit.
 Apache-2.0 (`LICENSE`, `NOTICE`). Was `wabi-wit-gen` erzeugt, gehört dir: der
 generierte Code und die mitkopierten Runtimes lassen sich unter jeder Lizenz
 verwenden, auch in proprietären Apps, ohne Lizenzhinweis.
+
+## Initialisierung und erneute Generierung
+
+Beim ersten Lauf können bearbeitbare Beispiel-Apps und Core-Gerüste angelegt werden:
+
+```bash
+npx @nfails/wabi-wit-gen wit/ --out sdk --target ts,dart,csharp --core csharp --scaffold examples
+```
+
+Dabei entsteht im aktuellen Projektverzeichnis eine `wabi-gen.conf` mit relativen
+Pfaden. Danach reichen im selben Verzeichnis:
+
+```bash
+npx @nfails/wabi-wit-gen          # SDKs nach WIT-Änderungen aktualisieren
+npx @nfails/wabi-wit-gen --check  # CI: nur prüfen, keinerlei Dateien ändern
+```
+
+Beispielkonfiguration (von Hand bearbeitbar):
+
+```ini
+wit = wit
+out = sdk
+targets = ts,dart,csharp
+cores = csharp
+lock = wit/abi-ids.lock
+```
+
+Mit `--config pfad/wabi-gen.conf` lässt sich die Konfiguration aus einem anderen
+Verzeichnis verwenden. Pfade darin beziehen sich auf den Ort der Konfiguration;
+explizite CLI-Optionen überschreiben gespeicherte Werte. Eine explizite WIT-Datei
+lädt die Standardkonfiguration nur zusammen mit `--config`.
+
+SDK-Code, Runtime-Kopien, ABI-Dateien, Core-Glue, Paketdateien, Build-Helfer und
+`sdk/README.md` werden aktualisiert. Der Wire-ID-Lock wird kompatibel fortgeschrieben.
+Bearbeitbare Dateien unter `sdk/examples/` und Core-Gerüste wie `Core.cs`,
+`src/lib.rs`, `starter.go` und deren Projektdateien werden nur bei `--scaffold examples`
+und nur dann angelegt, wenn die einzelne Datei fehlt. Vorhandene Inhalte und die
+Konfiguration werden auch bei erneutem Scaffolding niemals überschrieben.
+`--check` ignoriert diese bearbeitbaren Dateien. Nicht mehr benötigte generierte
+Dateien werden derzeit nicht automatisch gelöscht.
+
+Die Beispiel-Apps laden den Core und prüfen dessen Metadaten. Fachliche Aufrufe
+müssen mit gültigen Parametern ergänzt werden. Core-Gerüste enthalten ausdrücklich
+unimplementierte Methoden; neue WIT-Methoden erfordern eine Ergänzung im eigenen
+Core. Die paketbezogene `sdk/README.md` beschreibt Build und Bibliotheksablage für
+die tatsächlich gewählten Cores. Ohne gewählten Core ist eine passende native
+Bibliothek bereitzustellen.

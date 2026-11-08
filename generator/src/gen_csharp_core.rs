@@ -526,3 +526,25 @@ mod tests {
         assert!(super::emit(&m).is_err());
     }
 }
+
+/// Editable NativeAOT implementation skeleton.
+pub fn scaffold(m: &Model) -> String {
+    let mut o = String::from("// Starter implementation: edit freely; never overwritten by the generator.\n");
+    usings(&mut o, m);
+    w!(o, "sealed class Core : ICore {{");
+    w!(o, "    public string CoreInfo => \"{} starter (unimplemented)\";", m.contract_id());
+    for r in &m.resources {
+        let c = r.ctor.as_ref().unwrap();
+        w!(o, "    public {} Create{}({}) => new {}Implementation();", iface(r), pascal(&r.name), params(c, false), pascal(&r.name));
+    }
+    w!(o, "}}");
+    for r in &m.resources {
+        w!(o, "sealed class {}Implementation : {} {{", pascal(&r.name), iface(r));
+        w!(o, "    public void Close() {{ }}");
+        for f in &r.methods {
+            w!(o, "    public {} {}({}) => throw new NotImplementedException(\"implement {}.{}\");", ret_ty(f), method_name(f), params(f, f.is_async), r.name, f.name);
+        }
+        w!(o, "}}");
+    }
+    o
+}

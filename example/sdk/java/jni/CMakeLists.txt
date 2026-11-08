@@ -1,9 +1,9 @@
 # Copied by wabi-wit-gen from generator/runtime — DO NOT EDIT; change the source there.
 # Builds the JNI shim of this package for Android (per ABI) — e.g. from an app module:
 #
-#   android { externalNativeBuild { cmake { path "<package>/generated/java/jni/CMakeLists.txt" } } }
+#   android { externalNativeBuild { cmake { path "<sdk-output>/java/jni/CMakeLists.txt" } } }
 #
-# The core itself (libwabi_client.so from scripts/build-native.sh android) goes
+# The core itself (libdemo_client.so built for the target Android ABI) goes
 # into src/main/jniLibs/<abi>/; the shim finds it at run time via dlopen, so the
 # shim never has to be rebuilt when the core (or its language) changes.
 cmake_minimum_required(VERSION 3.18)

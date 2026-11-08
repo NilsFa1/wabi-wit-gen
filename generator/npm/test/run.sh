@@ -17,6 +17,7 @@ trap 'rm -rf "$WORK"' EXIT
 BIN="$WORK/node_modules/@nfails/wabi-wit-gen/bin/wabi-wit-gen.mjs"
 cargo build --quiet --manifest-path "$GEN/Cargo.toml"
 NATIVE="${CARGO_TARGET_DIR:-$GEN/target}/debug/wabi-wit-gen"
+node "$NPM/test/regression.mjs" "$NATIVE" "$BIN"
 
 runners=("node")
 command -v bun >/dev/null && runners+=("bun")

@@ -79,7 +79,7 @@ public sealed class ObjectHandle : IDisposable
 
 /// <summary>
 /// Placeholder for executing the same contract as a WebAssembly component
-/// (client.component.wasm). See docs/COMPONENT_MODEL.md: the generated client
+/// (a .component.wasm file). The generated client
 /// classes stay identical; only this backend maps (method id, payload) to the
 /// component's exported functions via the Canonical ABI.
 /// </summary>
@@ -91,5 +91,5 @@ public sealed class ComponentModelBackend : IClientBackend
     public IAsyncEnumerable<byte[]> ReadStream(ulong stream, CancellationToken ct) => throw NotImplemented();
     public void DropObject(ulong obj) => throw NotImplemented();
     private static NotSupportedException NotImplemented() =>
-        new("The Component Model backend is an extension point; see docs/COMPONENT_MODEL.md.");
+        new("The Component Model backend is an extension point and is not implemented.");
 }

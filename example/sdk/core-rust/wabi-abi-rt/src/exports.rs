@@ -1,7 +1,7 @@
 //! The generic implementation of the functions of abi/wabi_abi_functions.h,
 //! parameterised over the WIT [`Package`]. Nothing here is exported directly:
 //! the generated `exports` module exports them under the package's symbol
-//! prefix (`wabi_client_call_sync`, ...) and forwards here. Every entry point:
+//! prefix (`<package_prefix>_call_sync`, ...) and forwards here. Every entry point:
 //!   * validates pointers and handles (never trusts the host),
 //!   * catches panics (unwinding across `extern "C"` would be UB),
 //!   * writes out-parameters on every path.

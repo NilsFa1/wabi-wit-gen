@@ -14,7 +14,7 @@ interface AbiCalls {
 
     /** Creates an AbiCalls for a core library; implementations need a public no-arg constructor. */
     interface Loader {
-        /** {@code path == null}: the platform default ("wabi_client"). */
+        /** {@code path == null}: the platform default ("@LIBRARY@"). */
         AbiCalls open(String path);
 
         /** Reads only the four metadata symbols (works on incompatible libraries). */

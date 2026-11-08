@@ -36,7 +36,7 @@ use std::ffi::CStr;
 /// One WIT package as seen by the generic exports. Implemented by the
 /// generated code; the core only implements the generated traits.
 pub trait Package: 'static {
-    /// `wabi:client@1.0.0`
+    /// `namespace:package@1.0.0` (example)
     const CONTRACT_ID: &'static CStr;
     /// Free text identifying the core implementation.
     const CORE_INFO: &'static CStr;

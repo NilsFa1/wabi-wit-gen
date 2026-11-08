@@ -4,7 +4,7 @@
     C# SDK for demo:client@1.0.0: the generated code and its runtime (namespace Demo.Client.Runtime).
 
       dotnet pack -c Release        NuGet package Demo.Client.1.0.0.nupkg incl. the native core from
-                                    ../native (build-native.sh) under runtimes/<rid>/native/
+                                    ../native (see ../README.md) under runtimes/<rid>/native/
       <ProjectReference Include="…/Demo.Client.csproj" />   during development: the library of this
                                     machine from ../native is copied next to the app
   -->

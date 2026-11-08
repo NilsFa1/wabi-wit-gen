@@ -2,7 +2,7 @@
  *
  * Native ABI bindings of package demo:client@1.0.0 (symbol prefix `demo_client_`).
  * Normative definitions: abi/wabi_abi.h, abi/wabi_abi_functions.h, abi/ABI.md.
- * Compile with -I<repo>/abi (or put wabi_abi.h next to this file). */
+ * Compile with -I<SDK-output>/abi (or put wabi_abi.h next to this file). */
 #ifndef DEMO_CLIENT_WABI_BINDINGS_H
 #define DEMO_CLIENT_WABI_BINDINGS_H
 

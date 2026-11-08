@@ -70,7 +70,7 @@ final class _Release {
 }
 
 /// Placeholder for running the same contract as a WebAssembly component
-/// (docs/COMPONENT_MODEL.md). Generated client classes stay identical.
+/// Generated client classes stay identical.
 final class ComponentModelBackend implements ClientBackend {
   @override
   String get description => 'component-model (not implemented in this PoC)';

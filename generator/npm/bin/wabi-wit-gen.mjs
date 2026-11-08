@@ -17,10 +17,10 @@ process.emitWarning = (warning, ...rest) => {
 const { WASI } = await import("node:wasi");
 
 // Options whose value is a path, plus the positional WIT path.
-const PATH_OPTIONS = new Set(["--out", "-o", "--lock", "--api-baseline"]);
+const PATH_OPTIONS = new Set(["--out", "-o", "--lock", "--api-baseline", "--config"]);
 // --core rust,go=<dir>: the directory behind `=` is a path, too.
 const CORE_OPTIONS = new Set(["--core", "--cores", "-c"]);
-const VALUE_OPTIONS = new Set([...PATH_OPTIONS, "--target", "--targets", "-t", "--core", "--cores", "-c"]);
+const VALUE_OPTIONS = new Set([...PATH_OPTIONS, "--target", "--targets", "-t", "--core", "--cores", "-c", "--scaffold"]);
 
 // WASI sees one virtual file system. POSIX: "/" is the host root. Windows: every
 // drive becomes "/<letter>" ("C:\\work\\x.wit" -> "/c/work/x.wit").
@@ -39,7 +39,7 @@ function toGuest(hostPath) {
 }
 
 const args = process.argv.slice(2);
-const guestArgs = [];
+const guestArgs = ["--working-dir", toGuest(process.cwd())];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (VALUE_OPTIONS.has(a) && i + 1 < args.length) {

@@ -19,6 +19,8 @@ macro_rules! w {
 }
 
 mod abi_table;
+mod config;
+mod scaffold;
 mod api;
 mod gen_csharp;
 mod gen_csharp_core;
@@ -48,6 +50,8 @@ usage:
         --lock    wire-id lock file (default: abi-ids.lock next to the WIT)
         --api-baseline <file>   check against a released API (optional)
         --write-api-baseline    (re)write that baseline instead of checking against it
+  --config <file>         project config (default: ./wabi-gen.conf when no WIT is given)
+  --scaffold examples     create editable example apps, core skeletons and project config once
   --check                 write nothing; fail if any output (incl. the lock) is out of date
   --version, --help";
 
@@ -55,29 +59,57 @@ const SDK_LANGS: [&str; 5] = ["csharp", "java", "swift", "dart", "ts"];
 const CORE_LANGS: [&str; 3] = ["rust", "go", "csharp"];
 
 /// One `--core` entry: the language and, for Go, where its glue goes.
+#[derive(Clone)]
 struct Core {
     lang: String,
     dir: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
-    let mut wit: Option<PathBuf> = None;
-    let mut out: Option<PathBuf> = None;
-    let mut targets: Vec<String> = vec![];
-    let mut cores: Vec<Core> = vec![];
-    let mut lock_arg: Option<PathBuf> = None;
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    let cwd = if let Some(i) = raw.iter().position(|a| a == "--working-dir") {
+        PathBuf::from(raw.get(i + 1).context("--working-dir needs a value")?)
+    } else { std::env::current_dir()? };
+    let mut explicit_wit = false;
+    let mut scan = raw.iter();
+    while let Some(a) = scan.next() {
+        if ["--out", "-o", "--target", "--targets", "-t", "--core", "--cores", "-c", "--lock", "--api-baseline", "--config", "--working-dir", "--scaffold"].contains(&a.as_str()) { scan.next(); }
+        else if !a.starts_with('-') { explicit_wit = true; }
+    }
+    let config_arg = raw.iter().position(|a| a == "--config").map(|i| raw.get(i + 1).context("--config needs a value")).transpose()?;
+    let config_path = config_arg.map(|p| cwd.join(p)).unwrap_or_else(|| cwd.join("wabi-gen.conf"));
+    let help = raw.iter().any(|a| ["--help", "-h", "--version", "-V"].contains(&a.as_str()));
+    let creating_config = raw.windows(2).any(|w| w == ["--scaffold", "examples"]) && !config_path.exists();
+    let saved = if !help && !creating_config && (config_arg.is_some() || (!explicit_wit && config_path.exists())) { config::read(&config_path)? } else { config::Config::default() };
+    let mut wit = saved.wit;
+    let mut out = saved.out;
+    let mut targets = saved.targets;
+    let mut cores = saved.cores;
+    let mut lock_arg = saved.lock;
     let mut check = false;
-    let mut api_baseline: Option<PathBuf> = None;
+    let mut api_baseline = saved.baseline;
     let mut write_api_baseline = false;
-    let mut args = std::env::args().skip(1);
+    let mut scaffold_examples = false;
+    let mut cli_wit = false;
+    let mut cli_targets = false;
+    let mut cli_cores = false;
+    let mut args = raw.into_iter();
     while let Some(a) = args.next() {
         let mut value = |name: &str| args.next().with_context(|| format!("{name} needs a value"));
         match a.as_str() {
+            "--config" | "--working-dir" => { value(&a)?; }
+            "--scaffold" => {
+                let mode = value("--scaffold")?;
+                if mode != "examples" { bail!("unknown scaffold {mode} (expected examples)"); }
+                scaffold_examples = true;
+            }
             "--out" | "-o" => out = Some(PathBuf::from(value("--out")?)),
             "--target" | "--targets" | "-t" => {
+                if !cli_targets { targets.clear(); cli_targets = true; }
                 targets.extend(value("--target")?.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()))
             }
             "--core" | "--cores" | "-c" => {
+                if !cli_cores { cores.clear(); cli_cores = true; }
                 for entry in value("--core")?.split(',').map(str::trim).filter(|c| !c.is_empty() && *c != "none") {
                     let (lang, dir) = match entry.split_once('=') {
                         Some((lang, dir)) => (lang, Some(PathBuf::from(dir))),
@@ -106,9 +138,10 @@ fn main() -> Result<()> {
             }
             other if other.starts_with('-') => bail!("unknown option {other}\n\n{USAGE}"),
             other => {
-                if wit.is_some() {
+                if cli_wit {
                     bail!("more than one WIT path given ({other})\n\n{USAGE}");
                 }
+                cli_wit = true;
                 wit = Some(PathBuf::from(other));
             }
         }
@@ -124,6 +157,12 @@ fn main() -> Result<()> {
     for t in &targets {
         if !SDK_LANGS.contains(&t.as_str()) {
             bail!("unknown --target {t} (one of: {})", SDK_LANGS.join(", "));
+        }
+    }
+
+    for core in &cores {
+        if !CORE_LANGS.contains(&core.lang.as_str()) || (core.dir.is_some() && core.lang != "go") {
+            bail!("invalid core configuration: {}", core.lang);
         }
     }
 
@@ -153,6 +192,13 @@ fn main() -> Result<()> {
     // --- derive everything ---------------------------------------------------
     let summary = sdk_outputs_all(&out, &model, &targets, &cores, &mut outputs)?;
 
+    let starters = if scaffold_examples && !check {
+        let settings = config::Config { wit: Some(wit.clone()), out: Some(out.clone()), targets: targets.clone(), cores: cores.clone(), lock: Some(outputs[0].0.clone()), baseline: api_baseline.clone() };
+        let mut files = scaffold::files(&out, &model, &targets, &cores);
+        files.push((config_path.clone(), config::render(&settings, &config_path, &cwd)?));
+        files
+    } else { vec![] };
+
     let mut stale = vec![];
     for (path, text) in &outputs {
         let current = std::fs::read_to_string(path).ok();
@@ -176,6 +222,13 @@ fn main() -> Result<()> {
         model.imports.len()
     );
     if !check {
+        if scaffold_examples {
+            for (path, text) in starters {
+                create_starter(&path, &text)?;
+            }
+            println!("Starter files: created only when absent; existing files preserved. Config: {}", config_path.display());
+            println!("Core project setup is included in the starters. Implement their TODO methods, then follow {}/README.md to build and run the examples.", out.display());
+        }
         print!("{summary}");
     }
     Ok(())
@@ -307,6 +360,8 @@ fn sdk_outputs_all(out: &Path, model: &ir::Model, targets: &[String], cores: &[C
         }
     }
 
+    outputs.push((out.join("README.md"), packaging::sdk_readme(model, &targets, cores)));
+
     let o = out.display();
     let mut s = String::new();
     writeln!(s, "\nwritten to {o}/:").unwrap();
@@ -348,6 +403,7 @@ fn sdk_outputs_all(out: &Path, model: &ir::Model, targets: &[String], cores: &[C
             _ => writeln!(s, "  core-csharp/    generated glue + C# core runtime (NativeAOT)\n\nC# core: compile core-csharp/generated/*.cs, core-csharp/runtime/*.cs, csharp/Types.g.cs, csharp/WireCodec.g.cs,\n  csharp/Runtime/MsgPack.cs and csharp/Runtime/Exceptions.cs, add `global using {};`,\n  publish with NativeAOT as {prefix}.", runtime::csharp_namespace(model)).unwrap(),
         }
     }
+    writeln!(s, "\nSee {o}/README.md for package-specific build and usage instructions.").unwrap();
     writeln!(s, "\nKeep {} under version control: it pins every wire id (append-only).", "abi-ids.lock").unwrap();
     Ok(s)
 }
@@ -357,6 +413,23 @@ fn write(path: &Path, text: &str) -> Result<()> {
         std::fs::create_dir_all(dir)?;
     }
     std::fs::write(path, text).with_context(|| format!("writing {}", path.display()))
+}
+
+/// Preserve existing files, including dangling symlinks (WASI may follow them
+/// even with create_new). Exclusive creation also protects existing regular files.
+fn create_starter(path: &Path, text: &str) -> Result<()> {
+    use std::io::Write;
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        Err(e) => return Err(e).with_context(|| format!("inspecting starter {}", path.display())),
+    }
+    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+    match std::fs::OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(mut file) => file.write_all(text.as_bytes()).with_context(|| format!("writing starter {}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(e).with_context(|| format!("creating starter {}", path.display())),
+    }
 }
 
 #[cfg(test)]
@@ -394,6 +467,64 @@ mod tests {
     }
 
     /// The embedded headers (abi/) match the table every binding is derived from.
+    #[test]
+    fn independent_packages_have_local_names_and_core_specific_guides() {
+        for (namespace, package) in [("alpha", "archive-reader"), ("beta", "volume-tools")] {
+            let src = format!("package {namespace}:{package}@1.0.0; interface api {{ resource reader {{ constructor(); ping: func() -> u32; }} }} world w {{ export api; }}");
+            let (m, lock) = build(&src, "");
+            let (_, again) = build(&src, &lock);
+            assert_eq!(lock, again);
+            for core in [None, Some("rust"), Some("go"), Some("csharp")] {
+                let cores: Vec<Core> = core.map(|lang| Core { lang: lang.into(), dir: None }).into_iter().collect();
+                let targets = SDK_LANGS.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+                let mut files = vec![];
+                sdk_outputs_all(Path::new("sdk"), &m, &targets, &cores, &mut files).unwrap();
+                let mut repeat = vec![];
+                sdk_outputs_all(Path::new("sdk"), &m, &targets, &cores, &mut repeat).unwrap();
+                assert_eq!(files, repeat);
+                for (path, text) in &files {
+                    for stale in ["wabi_client", "Wabi.Client", "com.wabi.client", "@LIBRARY@", "@JNI_CLASS@", "docs/COMPONENT_MODEL.md", "../example/"] {
+                        assert!(!text.contains(stale), "{} contains {stale}", path.display());
+                    }
+                }
+                let readme = &files.iter().find(|(p,_)| p == Path::new("sdk/README.md")).unwrap().1;
+                for lang in ["rust", "go"] {
+                    let script = format!("core-{lang}/build-native.sh");
+                    assert_eq!(readme.contains(&script), core == Some(lang));
+                    assert_eq!(files.iter().any(|(p,_)| p == &Path::new("sdk").join(&script)), core == Some(lang));
+                }
+                if core == Some("csharp") { assert!(readme.contains("dotnet publish")); }
+                let java = runtime::java_package(&m).replace('.', "/");
+                assert!(files.iter().any(|(p,t)| p == &Path::new("sdk/java").join(&java).join("AbiConstants.java") && t.contains(&format!("LIBRARY = \"{}\"", m.symbol_prefix()))));
+                let jni_class = format!("Java_{}_JniAbi_", runtime::java_package(&m).replace('_', "_1").replace('.', "_"));
+                let shim = &files.iter().find(|(p,_)| p == &Path::new("sdk/java/jni").join(format!("{}_jni.c", m.symbol_prefix()))).unwrap().1;
+                assert!(shim.contains(&jni_class), "JNI symbol must escape package underscores");
+                let header = &files.iter().find(|(p,_)| p == &Path::new("sdk/c").join(format!("{}.h", m.symbol_prefix()))).unwrap().1;
+                assert!(header.contains(&format!("#define {}_SYMBOL_PREFIX \"{}_\"", m.symbol_prefix().to_ascii_uppercase(), m.symbol_prefix())));
+            }
+        }
+    }
+
+    #[test]
+    fn starter_files_and_project_settings_are_user_owned() {
+        let dir = std::env::temp_dir().join(format!("wabi-starter-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let path = dir.join("existing.txt");
+        create_starter(&path, "initial").unwrap();
+        std::fs::write(&path, [0xff, 0x00]).unwrap();
+        create_starter(&path, "replacement").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), [0xff, 0x00]);
+        let config_path = dir.join("wabi-gen.conf");
+        let config = config::Config { wit: Some(dir.join("wit")), out: Some(dir.join("sdk")), targets: vec!["ts".into()], cores: vec![Core { lang: "go".into(), dir: Some(dir.join("core with spaces")) }], ..Default::default() };
+        let text = config::render(&config, &config_path, &dir).unwrap();
+        assert!(text.contains("wit = wit\nout = sdk"));
+        std::fs::write(&config_path, text).unwrap();
+        let saved = config::read(&config_path).unwrap();
+        assert_eq!(saved.wit, config.wit);
+        assert_eq!(saved.out, config.out);
+        assert_eq!(saved.cores[0].dir, config.cores[0].dir);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn abi_headers_match_the_table() {
         let abi = runtime::abi();

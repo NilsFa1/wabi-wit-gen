@@ -1,3 +1,5 @@
+# macOS metadata
+.DS_Store
 # Rust
 target/
 # .NET build output (scoped: `bin/` alone would also hide example/core-rust/src/bin)

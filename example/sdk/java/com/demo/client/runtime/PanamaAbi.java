@@ -33,7 +33,7 @@ final class PanamaAbi implements AbiCalls {
             var lookup = lookup(path);
             var linker = Linker.nativeLinker();
             try {
-                String p = AbiConstants.SYMBOL_PREFIX; // wabi_client_abi_version, ... (ABI.md §1.1)
+                String p = AbiConstants.SYMBOL_PREFIX; // demo_client_abi_version, ... (ABI.md §1.1)
                 int version = (int) linker.downcallHandle(find(lookup, p + "abi_version"), FunctionDescriptor.of(JAVA_INT)).invokeExact();
                 long caps = (long) linker.downcallHandle(find(lookup, p + "abi_capabilities"), FunctionDescriptor.of(JAVA_LONG)).invokeExact();
                 var str = FunctionDescriptor.of(ADDRESS);

@@ -173,8 +173,8 @@ public final class NativeBackend: ClientBackend, @unchecked Sendable {
     }
 }
 
-/// Placeholder for running the same contract as a WebAssembly component; see
-/// docs/COMPONENT_MODEL.md. Generated client classes stay identical.
+/// Placeholder for running the same contract as a WebAssembly component.
+/// Generated client classes stay identical.
 public final class ComponentModelBackend: ClientBackend, @unchecked Sendable {
     public var description: String { "component-model (not implemented in this PoC)" }
     public init() {}

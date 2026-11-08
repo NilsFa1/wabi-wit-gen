@@ -819,3 +819,21 @@ mod tests {
         }
     }
 }
+
+/// Editable implementation skeleton beside the generated Go glue.
+pub fn scaffold(m: &Model) -> String {
+    let mut o = String::from("// Starter implementation: edit freely; never overwritten by the generator.\npackage main\nimport (\n\"context\"\nwabiabi \"wabi.example/wabiabi\"\n)\nvar _ context.Context\nvar _ = wabiabi.OK\nfunc main() {}\n");
+    w!(o, "const coreInfo = \"{} starter (unimplemented)\"", m.contract_id());
+    for r in &m.resources {
+        let name = pascal(&r.name);
+        w!(o, "type starter{name} struct {{}}");
+        w!(o, "func new{name}({}) {name} {{ return &starter{name}{{}} }}", params_sig(r.ctor.as_ref().unwrap()).join(", "));
+        w!(o, "func (s *starter{name}) Close() {{}}");
+        for f in &r.methods {
+            let mut ps = params_sig(f);
+            if f.is_async { ps.insert(0, "ctx context.Context".into()); }
+            w!(o, "func (s *starter{name}) {}({}){} {{ panic(\"implement {}.{}\") }}", pascal(&f.name), ps.join(", "), ret_sig(&f.ret), r.name, f.name);
+        }
+    }
+    o
+}

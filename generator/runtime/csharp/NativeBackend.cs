@@ -275,7 +275,7 @@ public sealed record CoreInfo(uint AbiVersion, WabiCapabilities Capabilities, st
         var lib = NativeLibrary.Load(libraryPath);
         try
         {
-            // Symbols carry this package's prefix (wabi_client_abi_version, ...), ABI.md §1.1.
+            // Symbols carry this package's prefix (@LIBRARY@_abi_version, ...), ABI.md §1.1.
             var version = ((delegate* unmanaged[Cdecl]<uint>)NativeLibrary.GetExport(lib, Contract.SymbolPrefix + "abi_version"))();
             var caps = ((delegate* unmanaged[Cdecl]<ulong>)NativeLibrary.GetExport(lib, Contract.SymbolPrefix + "abi_capabilities"))();
             var contract = ((delegate* unmanaged[Cdecl]<IntPtr>)NativeLibrary.GetExport(lib, Contract.SymbolPrefix + "contract_id"))();
