@@ -1,35 +1,41 @@
 name: wabi-wit-gen release
 
-# Publishes the npm package @nfails/wabi-wit-gen (generator as WebAssembly) when a tag
+# Stages the npm package @nfails/wabi-wit-gen (generator as WebAssembly) when a tag
 # wabi-wit-gen-v<version> is pushed. The version must match generator/Cargo.toml.
-# Needs the repository secret NPM_TOKEN (npm automation token).
+# Configure a GitHub Actions Trusted Publisher on npmjs.com for NilsFa1/wabi-wit-gen
+# and workflow filename wabi-wit-gen-release.yml. Allow staging only; no npm token
+# or separate dist-tag permission is needed. A maintainer approves the stage with 2FA.
 on:
   push:
     tags: ["wabi-wit-gen-v*"]
 
 permissions:
   contents: read
-  id-token: write # npm provenance
+  id-token: write # npm Trusted Publishing (OIDC) and provenance
 
 jobs:
-  publish:
+  stage:
+    name: Build, test and stage npm package
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: wasm32-wasip1 }
       - uses: actions/setup-node@v4
-        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
+        with: { node-version: 24, registry-url: "https://registry.npmjs.org" }
+      - name: install npm with staged publishing support
+        run: npm install --global npm@11.19.0
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: "10.0.x" }
       - uses: oven-sh/setup-bun@v2
       - name: version of the tag matches Cargo.toml
         run: |
           want="${GITHUB_REF_NAME#wabi-wit-gen-v}"
           have=$(sed -n 's/^version = "\(.*\)"/\1/p' generator/Cargo.toml | head -1)
           [ "$want" = "$have" ] || { echo "tag $want != generator/Cargo.toml $have"; exit 1; }
+          echo "PACKAGE_VERSION=$have" >> "$GITHUB_ENV"
       - run: generator/npm/build.sh
       - run: generator/npm/test/run.sh
-      - name: publish
+      - name: stage package for maintainer approval
         working-directory: generator/npm
-        run: npm publish --provenance --access public nfails-wabi-wit-gen-*.tgz
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm stage publish "./nfails-wabi-wit-gen-${PACKAGE_VERSION}.tgz" --provenance --access public --tag latest

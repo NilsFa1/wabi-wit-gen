@@ -1,6 +1,6 @@
 // Hand-written, generic.
 
-/// Runtime-level failures. Contract errors (e.g. `ClientError`) are thrown directly.
+/// Runtime-level failures. Errors declared by the WIT contract are thrown directly.
 public enum WabiRuntimeError: Error, Equatable, Sendable {
     /// The core broke the ABI contract or returned an undecodable payload.
     case protocolError(String)

@@ -1,5 +1,36 @@
 # Wabi Native ABI v1.2 — Spezifikation
 
+## Beispiele dieses Pakets
+
+Diese SDK-Ausgabe gehört zu `demo:client@1.0.0`. Alle folgenden Vertragsnamen stammen
+aus dem eingelesenen WIT-Modell; es werden keine Referenzpaket-Typen ergänzt.
+
+- WIT-Paket: `demo:client`
+- Symbolpräfix: `demo_client_`
+- Native Bibliothek: `libdemo_client.so`, `libdemo_client.dylib` oder `demo_client.dll`
+- Paket-Header: [`demo_client.h`](../c/demo_client.h)
+
+Ressourcen des Vertrags: `client`, `transport`.
+
+Record-Ausschnitt aus diesem Vertrag:
+
+```wit
+record client-options {
+    endpoint: string,
+    api-key: option<string>,
+    request-timeout-ms: u32,
+    key-id: option<string>,
+}
+```
+
+Ergebnistyp von `client.connect`: `result<_, client-error>`.
+Die dort deklarierten Domänenfehler bleiben Payload-Daten und sind keine ABI-Statuscodes.
+
+Host-Imports dieses Vertrags: `import host-keys;`. Die App implementiert deren im WIT
+deklarierte Funktionen.
+
+---
+
 > 1.1 ergänzt optionale Host-Calls (§4a). 1.2 ergänzt daran die Instanz, den
 > Abbruch und eine Shutdown-Garantie (§4a) sowie Ressourcen als Parameter und
 > Rückgabewerte (§5.2). Alles aus 1.0 gilt unverändert.
@@ -20,8 +51,8 @@ Jeder Core muss mit eigenen ABI- und Integrationstests geprüft werden.
 ## 1. Grundprinzipien
 
 1. **Klein und generisch.** 17 Funktionen (pro WIT-Paket unter eigenem Symbol-Präfix, §1.1). Eine neue WIT-Funktion ändert die
-   ABI nicht: sie bekommt eine Method-ID und wird über `wabi_call_sync` /
-   `wabi_call_async` aufgerufen.
+   ABI nicht: sie bekommt eine Method-ID und wird über `demo_client_call_sync` /
+   `demo_client_call_async` aufgerufen.
 2. **Nur feste C-Typen.** `uint32_t`, `uint64_t`, `int32_t`, `size_t`,
    Zeiger, zwei `struct {ptr,len}`, ein Funktionszeiger. Keine
    Rust-/Go-/Zig-Typen, keine Exceptions, kein `errno`, kein Thread-Local-State.
@@ -35,27 +66,26 @@ Jeder Core muss mit eigenen ABI- und Integrationstests geprüft werden.
 ### 1.1 Symbol-Präfix pro WIT-Paket
 
 Jedes WIT-Paket exportiert die 17 Funktionen unter einem **eigenen Präfix**,
-abgeleitet aus dem Paketnamen: `<namespace>_<name>` in snake_case.
+abgeleitet aus dem Paketnamen: `demo_client` in snake_case.
 
 | WIT-Paket | Präfix | Symbole | Bibliothek |
 |---|---|---|---|
 | `demo:client` | `demo_client` | `demo_client_call_sync`, `demo_client_future_take`, … | `libdemo_client.so` / `demo_client.dll` |
-| `geo:lib` | `geo_lib` | `geo_lib_call_sync`, … | `libgeo_lib.so` |
 
 * **Warum:** Mehrere Cores bzw. Pakete können im selben Prozess leben, auch
   **statisch in eine Binary gelinkt** (iOS-xcframework, Rust-Core mit
   eingebetteter Go/Zig-Bibliothek). Mit gemeinsamen Namen würde das Linken
   fehlschlagen (`multiple definition of …`) oder, bei dynamischen
   Bibliotheken, ein Core still den anderen überdecken.
-  `tests/abi/multi_package.c` linkt zwei Cores unter `demo_client` und
-  `geo_lib` statisch in ein Programm und ruft beide auf.
+  Jeder Core muss dazu den Präfix seines eigenen WIT-Pakets exportieren.
+  Ein Integrationstest mit mehreren Paketen muss die unabhängige Auflösung prüfen.
 * **Unverändert gemeinsam** sind die Typen (`wabi_bytes`, `wabi_buffer`,
   `wabi_status`, `wabi_future_callback`, …), Statuscodes und Capabilities in
   `wabi_abi.h`. Sie sind für alle Pakete identisch.
 * **Header:** `wabi_abi_functions.h` deklariert die Funktionen mit
   `WABI_FN(name)` für das jeweils definierte `WABI_PREFIX` und darf pro Paket
   einmal eingebunden werden. Der Generator erzeugt zusätzlich einen
-  ausgeschriebenen Header je Paket (`c/<präfix>.h`).
+  ausgeschriebenen Header je Paket (`c/demo_client.h`).
 * **SDKs** kennen den Präfix aus dem generierten Code (`Contract.SymbolPrefix`,
   `AbiConstants.SYMBOL_PREFIX`, …). Der JNI-Shim bekommt ihn zur Laufzeit und
   ist deshalb für alle Pakete derselbe.
@@ -66,10 +96,10 @@ abgeleitet aus dem Paketnamen: `<namespace>_<name>` in snake_case.
 
 | Funktion | Bedeutung |
 |---|---|
-| `wabi_abi_version()` | `(major << 16) \| minor` der ABI |
-| `wabi_abi_capabilities()` | Bitmaske `WABI_CAP_*` |
-| `wabi_contract_id()` | WIT-Paket inkl. Version, z. B. `demo:client@1.0.0` |
-| `wabi_core_info()` | Freitext zur Diagnose, z. B. `demo-go-core/0.1.0` |
+| `demo_client_abi_version()` | `(major << 16) \| minor` der ABI |
+| `demo_client_abi_capabilities()` | Bitmaske `WABI_CAP_*` |
+| `demo_client_contract_id()` | WIT-Paket inkl. Version, z. B. `demo:client@1.0.0` |
+| `demo_client_core_info()` | Freitext zur Diagnose, z. B. eine Beschreibung der Core-Implementierung |
 
 Ein SDK MUSS beim Laden prüfen und bei Verletzung mit einem eigenen Fehlertyp
 abbrechen (`WabiIncompatibleLibraryException` / `WabiRuntimeError.incompatibleLibrary`),
@@ -81,7 +111,7 @@ bevor es irgendeine andere Funktion aufruft:
   (Method-IDs ändern sich nie, §10), ein älterer SDK nutzt sie nur nicht.
 * **Capabilities:** Pflicht sind `SYNC_CALLS`, `ASYNC_CALLS`, `STREAMS`,
   `PAYLOAD_MSGPACK_1`, für Pakete mit Imports außerdem `HOST_CALLS_2` (§4a). `CANCELLATION` und `THREADED_CALLBACK` sind
-  informativ: `wabi_future_cancel` ist immer aufrufbar und sicher; ein
+  informativ: `demo_client_future_cancel` ist immer aufrufbar und sicher; ein
   „eager“ Core (alle Futures sind bei Rückgabe schon fertig, z. B. der
   Zig-Stub) hat nichts abzubrechen. Unbekannte Bits MÜSSEN ignoriert werden.
 
@@ -102,9 +132,9 @@ typedef uint64_t wabi_stream_handle;  // Pull-Stream
 | **Opak** | Hosts DÜRFEN Handles nicht interpretieren. (Rust/Go/Zig kodieren die Art im obersten Byte — nur zur Lesbarkeit in Logs.) |
 | **Nie wiederverwendet** | Ein Core MUSS Handle-Werte innerhalb eines Prozesses eindeutig halten (z. B. monotoner 64-Bit-Zähler). Dadurch wird jeder Zugriff auf ein freigegebenes Handle *erkannt* statt ein neues Objekt zu treffen (ABA-frei). |
 | **Besitz** | Jedes Handle, das der Host erhält (`out_future`, Handle im Response-Payload eines Konstruktors oder einer `stream<T>`-Funktion), gehört dem Host. Er MUSS es genau einmal mit der passenden `*_drop`-Funktion freigeben. |
-| **Ungültig wird** | ein Handle ausschließlich durch seinen eigenen `*_drop`-Aufruf. `wabi_object_drop` invalidiert *nicht* die Futures/Streams des Objekts: laufende Futures werden abgeschlossen (Domain-Fehler wie `disconnected` oder `WABI_ERR_CANCELLED`), Streams enden (`WABI_STREAM_END` bzw. `WABI_ERR_CANCELLED`). Ihre Handles bleiben gültig, bis der Host sie freigibt. |
+| **Ungültig wird** | ein Handle ausschließlich durch seinen eigenen `*_drop`-Aufruf. `demo_client_object_drop` invalidiert *nicht* die Futures/Streams des Objekts: laufende Futures werden abgeschlossen (Domain-Fehler wie `disconnected` oder `WABI_ERR_CANCELLED`), Streams enden (`WABI_STREAM_END` bzw. `WABI_ERR_CANCELLED`). Ihre Handles bleiben gültig, bis der Host sie freigibt. |
 | **Double-Free** | Zweites `*_drop` → `WABI_ERR_INVALID_HANDLE`. Kein UB, kein Absturz. |
-| **Falsche Art** | Future-Handle an `wabi_stream_next` usw. → `WABI_ERR_INVALID_HANDLE`. |
+| **Falsche Art** | Future-Handle an `demo_client_stream_next` usw. → `WABI_ERR_INVALID_HANDLE`. |
 | **Thread-Safety** | Alle Funktionen sind von beliebigen Threads gleichzeitig aufrufbar, auch für dasselbe Handle. `drop` parallel zu einem anderen Aufruf auf demselben Handle ist erlaubt: der andere Aufruf sieht entweder das lebende Objekt oder `WABI_ERR_INVALID_HANDLE`. |
 
 SDKs kapseln Objekt-Handles in einem Typ, der genau einmal freigibt
@@ -114,12 +144,12 @@ Swift: `deinit`). Futures und Streams gibt das SDK in `finally` frei.
 ## 4. Futures
 
 ```c
-wabi_status wabi_call_async(object, method_id, request, &future);
-wabi_status wabi_future_subscribe(future, callback, user_data);
-wabi_status wabi_future_poll(future);                  // PENDING | READY
-wabi_status wabi_future_take(future, &out_result);     // Ergebnis herausbewegen
-wabi_status wabi_future_cancel(future);
-wabi_status wabi_future_drop(future);
+wabi_status demo_client_call_async(object, method_id, request, &future);
+wabi_status demo_client_future_subscribe(future, callback, user_data);
+wabi_status demo_client_future_poll(future);                  // PENDING | READY
+wabi_status demo_client_future_take(future, &out_result);     // Ergebnis herausbewegen
+wabi_status demo_client_future_cancel(future);
+wabi_status demo_client_future_drop(future);
 ```
 
 ### 4.1 Zustandsautomat
@@ -151,14 +181,14 @@ gestreutem Timing; Rust/Go liefern gemischte Ausgänge, alle korrekt).
 typedef void (*wabi_future_callback)(void *user_data, wabi_future_handle future);
 ```
 
-* `wabi_future_subscribe` liefert
+* `demo_client_future_subscribe` liefert
   * `WABI_OK` → Callback wird **genau einmal** aufgerufen, *auch* wenn das
     Future abgebrochen oder freigegeben wird. Damit ist der Callback der eine,
     sichere Ort, an dem der Host `user_data` freigibt (C#: `GCHandle.Free`,
     Swift: `Unmanaged.takeRetainedValue`, Java: Eintrag aus der Map entfernen).
   * `WABI_READY` → schon fertig, Callback wird **nie** aufgerufen.
   * `WABI_ERR_BUSY` (zweites Subscribe) / `WABI_ERR_INVALID_HANDLE` → nie aufgerufen.
-* Der Callback trägt **kein Ergebnis**; der Host ruft danach `wabi_future_take`.
+* Der Callback trägt **kein Ergebnis**; der Host ruft danach `demo_client_future_take`.
 * Er wird **nie innerhalb eines ABI-Aufrufs des Hosts** ausgeführt (kein
   Reentrancy-Risiko für Host-Frames). Muss ein Core wegen `cancel`/`drop`
   benachrichtigen, geschieht das asynchron auf einem Core-Thread.
@@ -169,7 +199,7 @@ typedef void (*wabi_future_callback)(void *user_data, wabi_future_handle future)
 | | Ergebnis im Callback (`cb(ud, status, ptr, len)`) | **Nur Signal + `take` (gewählt)** |
 |---|---|---|
 | FFI-Aufrufe pro Operation | 1 weniger | +1 (`take`) — bei HTTP/WebSocket-Latenzen irrelevant |
-| Lebensdauer des Puffers | nur während des Callbacks gültig → Host muss *im fremden Thread* sofort kopieren | Host kopiert, wann und wo er will; Puffer gehört ihm bis `wabi_buffer_free` |
+| Lebensdauer des Puffers | nur während des Callbacks gültig → Host muss *im fremden Thread* sofort kopieren | Host kopiert, wann und wo er will; Puffer gehört ihm bis `demo_client_buffer_free` |
 | Arbeit im Callback | Deserialisierung/Kopie im Core-Thread (blockiert den Core) | nur „Task fertig“-Signal, O(1) |
 | Polling-Hosts (WASM, Game-Loops, Tests) | brauchen trotzdem eine zweite API | `poll` + `take` ohne Callback funktionieren direkt |
 | Eager Cores | müssten Callback synchron aus `subscribe` rufen (Reentrancy) | `subscribe` → `WABI_READY`, fertig |
@@ -190,18 +220,18 @@ wertvoller.
 
 | Sprache | Typ | Abbruch |
 |---|---|---|
-| C# | `Task<T>` / `Task` | `CancellationToken` → `UnsafeRegister(wabi_future_cancel)`; ein bereits abgebrochener Token startet die Operation gar nicht |
-| Java | `CompletableFuture<T>` | Unterklasse `NativeFuture`: `cancel()` ruft zusätzlich `wabi_future_cancel` |
-| Swift | `async throws -> T` | `withTaskCancellationHandler { … } onCancel: { wabi_future_cancel }`; `Task.checkCancellation()` vor dem Start |
+| C# | `Task<T>` / `Task` | `CancellationToken` → `UnsafeRegister(demo_client_future_cancel)`; ein bereits abgebrochener Token startet die Operation gar nicht |
+| Java | `CompletableFuture<T>` | Unterklasse `NativeFuture`: `cancel()` ruft zusätzlich `demo_client_future_cancel` |
+| Swift | `async throws -> T` | `withTaskCancellationHandler { … } onCancel: { demo_client_future_cancel }`; `Task.checkCancellation()` vor dem Start |
 | Python | `Awaitable[T]` | `asyncio.Future` + `loop.call_soon_threadsafe` im Callback |
-| TypeScript (Bun) | `Promise<T>` | `AbortSignal` → `wabi_future_cancel`; Callback als `bun:ffi` `JSCallback` mit `threadsafe: true` (läuft später auf dem Event-Loop); `wabi_bytes`/`wabi_buffer` per Wert: zwei u64-Argumente (SysV, AAPCS64) bzw. Zeiger auf eine Kopie (Win64) |
-| JS (Node) | `Promise<T>` | `AbortSignal` → `wabi_future_cancel`; Callback via `napi_threadsafe_function` |
+| TypeScript (Bun) | `Promise<T>` | `AbortSignal` → `demo_client_future_cancel`; Callback als `bun:ffi` `JSCallback` mit `threadsafe: true` (läuft später auf dem Event-Loop); `wabi_bytes`/`wabi_buffer` per Wert: zwei u64-Argumente (SysV, AAPCS64) bzw. Zeiger auf eine Kopie (Win64) |
+| JS (Node) | `Promise<T>` | `AbortSignal` → `demo_client_future_cancel`; Callback via `napi_threadsafe_function` |
 
 ## 4a. Host-Calls (ABI 1.1 und 1.2): der Core ruft die App
 
-Importiert eine WIT-Welt ein Interface (`import host-keys;`), implementiert
-**die App** dessen Funktionen und der Core ruft sie auf, z. B. „signiere mit dem
-Schlüssel im Secure Enclave / Android Keystore“. Dafür gibt es **optionale**
+Importiert eine WIT-Welt ein Interface, implementiert **die App** dessen
+Funktionen und der Core ruft sie auf. Die konkreten Imports werden vom
+WIT-Vertrag des Pakets festgelegt. Dafür gibt es **optionale**
 Funktionen und zwei Capability-Bits; Pakete ohne Imports brauchen weiterhin nur
 ABI 1.0.
 
@@ -210,13 +240,13 @@ ABI 1.0.
 typedef void (*wabi_host_handler2)(void *user_data, wabi_object_handle object, uint32_t method_id,
                                    const uint8_t *request, size_t request_len, uint64_t call);
 typedef void (*wabi_host_cancel)(void *user_data, uint64_t call);
-wabi_status <prefix>_host_register2(wabi_host_handler2 handler, wabi_host_cancel on_cancel, void *user_data);
-wabi_status <prefix>_host_reply(uint64_t call, wabi_status status, wabi_bytes response);
+wabi_status demo_client_host_register2(wabi_host_handler2 handler, wabi_host_cancel on_cancel, void *user_data);
+wabi_status demo_client_host_reply(uint64_t call, wabi_status status, wabi_bytes response);
 
 /* ABI 1.1 (WABI_CAP_HOST_CALLS): derselbe eine Handler, ohne Objekt und ohne Abbruch */
 typedef void (*wabi_host_handler)(void *user_data, uint32_t method_id,
                                   const uint8_t *request, size_t request_len, uint64_t call);
-wabi_status <prefix>_host_register(wabi_host_handler handler, void *user_data); /* NULL: abmelden */
+wabi_status demo_client_host_register(wabi_host_handler handler, void *user_data); /* NULL: abmelden */
 ```
 
 1. **Method-IDs** der Import-Funktionen stehen wie alle anderen in `abi-ids.lock`
@@ -260,23 +290,24 @@ asynchron auf einem anderen Thread ankommen (Dart-Isolate, JS-Event-Loop),
 halten ihre Trampoline trotzdem für die Lebensdauer des Backends, weil ein
 bereits zugestellter Aufruf dort noch in der Warteschlange stehen kann.
 
-Generisches Beispiel für ein importiertes Interface `host-keys`; diese Namen
-gehören nicht zwingend zum Vertrag des Nutzerprojekts:
+Die App implementiert die aus den WIT-Imports erzeugten Host-Schnittstellen.
+Die Registrierung kann prozessweit oder für eine einzelne Ressourceninstanz
+angelegt werden. Eine Registrierung für eine Instanz hat Vorrang vor der
+prozessweiten und endet mit dieser Instanz.
 
-| Sprache | App implementiert | Registrierung | Abbruch kommt an als |
-|---|---|---|---|
-| C# | `IHostKeys` (`Task<T>`, Domänenfehler als `ClientException`) | `ClientHost.Register(app)` bzw. `Register(client, app)` | `CancellationToken` (letzter Parameter) |
-| Java | `HostKeys` (`CompletionStage<T>`) | `ClientHost.register(app)` bzw. `register(client, app)` | `cancel(true)` auf der zurückgegebenen Stage |
-| Dart/Flutter | `HostKeys` (`Future<T>`, wirft `ClientError…`) | `ClientHost.register(app)` bzw. `registerFor(client, app)` | `CancellationToken` (letzter Parameter) |
-| Swift | `HostKeys` (`async throws`) | `ClientHost.register(hostKeys:)` bzw. `register(for:hostKeys:)` | Abbruch des Tasks, in dem die Funktion läuft |
-| TypeScript (Bun) | `HostKeys` (`Promise<T>` oder synchron) | `ClientHost.register(app)` bzw. `registerFor(client, app)` | `AbortSignal` (letzter Parameter) |
-| Rust (Core) | ruft `host_keys::sign(…).await` (generiert) | – | Future wird verworfen → `on_cancel` |
-| Go (Core) | ruft `HostKeysSign(ctx, …)` (generiert) | – | `ctx` endet → `on_cancel` |
-| C# (Core, NativeAOT) | ruft `HostKeys.SignAsync(…, token)` | – | Token → `on_cancel` |
+| Sprache | Ausführung der Import-Funktion | Abbruch kommt an als |
+|---|---|---|
+| C# | `Task<T>`; Domänenfehler über die generierten Fehlertypen | `CancellationToken` |
+| Java | `CompletionStage<T>` | `cancel(true)` auf der zurückgegebenen Stage |
+| Dart/Flutter | `Future<T>`; Domänenfehler über die generierten Fehlertypen | `CancellationToken` |
+| Swift | `async throws` | Abbruch des ausführenden Tasks |
+| TypeScript (Bun) | `Promise<T>` oder synchron | `AbortSignal` |
+| Rust (Core) | generierter async-Import-Aufruf | Future wird verworfen → `on_cancel` |
+| Go (Core) | generierter Import-Aufruf mit Kontext | Kontext endet → `on_cancel` |
+| C# (Core, NativeAOT) | generierter Import-Aufruf mit Token | Token → `on_cancel` |
 
-Eine Registrierung für eine Instanz hat Vorrang vor der prozessweiten und endet
-mit der Instanz. Im obigen Beispiel signiert das importierte Interface `host-keys` jeden HTTP-Request mit einem
-Schlüssel, der in der App bleibt. Dieses Verhalten muss ein eigener Host-Call-Integrationstest prüfen.
+Das Zusammenspiel von Registrierung, Instanzzuordnung und Abbruch muss ein
+eigener Host-Call-Integrationstest für die Imports des Pakets prüfen.
 
 ## 5. Payload-Encoding v1
 
@@ -323,7 +354,7 @@ legt den Besitz fest:
 |---|---|---|
 | `borrow<R>` | Parameter | Der Core darf das Objekt für die Dauer des Aufrufs benutzen (bei `async` bis die Operation endet). Das Handle bleibt beim Host. |
 | `R` bzw. `own<R>` | Parameter | Das Objekt **geht in den Core über**: Das Handle ist danach ungültig, ohne dass der Destruktor der Ressource läuft (der Empfänger entscheidet, was mit dem Objekt geschieht). Im SDK ist das Objekt danach geschlossen. |
-| `R` bzw. `own<R>` | Rückgabe, ok-Arm von `result` | Der Core registriert ein neues Handle; der Host besitzt es und gibt es mit `<prefix>_object_drop` frei. |
+| `R` bzw. `own<R>` | Rückgabe, ok-Arm von `result` | Der Core registriert ein neues Handle; der Host besitzt es und gibt es mit `demo_client_object_drop` frei. |
 
 Ein Handle, das nicht existiert oder zu einer anderen Ressource gehört, führt zu
 `WABI_ERR_INVALID_HANDLE`. Handles sind nur als ganzer Parameter, als ganzes
@@ -340,7 +371,7 @@ andere ab.
 | Versionierung | Struct-Layouts einfrieren; neue Felder = neue Structs | Feld-Tags, optionale Felder, überspringbar |
 | Core-Austausch | jeder Core muss exakte Layouts, Alignment, Ownership pro Typ nachbauen | ein Codec + ein Dispatcher |
 | Generator | pro Sprache Marshalling-Code für Structs, Listen, Optionals, Strings | nur „Wert → Bytes“ |
-| Speicher-Ownership | pro Feld zu regeln (wer gibt den `char*` in `customer.email` frei?) | genau zwei Puffertypen, eine Regel (§7) |
+| Speicher-Ownership | pro Feld zu regeln (wer gibt ein zurückgegebenes String-Feld frei?) | genau zwei Puffertypen, eine Regel (§7) |
 | Debugbarkeit | Speicherdumps | Payloads mit jedem MessagePack-Tool lesbar |
 | Component Model | eigenes Layout ≠ Canonical ABI | Werte-Modell 1:1 aus WIT, leicht auf Canonical ABI abbildbar |
 
@@ -377,7 +408,7 @@ Zahlen, größer, langsamer).
 | Daten | Alloziert von | Freigegeben von | Lebensdauer / Kopie |
 |---|---|---|---|
 | `wabi_bytes` (Request) | Host | Host | nur während des Aufrufs gültig; der Core kopiert, was er behält |
-| `wabi_buffer` (Response, `take`, Diagnosen) | **Core** | **Host** mit `wabi_buffer_free` *derselben* Bibliothek, exakt `{ptr,len}` wie erhalten | gehört dem Host bis zum Free; SDKs kopieren sofort in verwaltete Arrays und geben frei |
+| `wabi_buffer` (Response, `take`, Diagnosen) | **Core** | **Host** mit `demo_client_buffer_free` *derselben* Bibliothek, exakt `{ptr,len}` wie erhalten | gehört dem Host bis zum Free; SDKs kopieren sofort in verwaltete Arrays und geben frei |
 | `{NULL, 0}` | — | Free ist No-op | leerer Puffer |
 | Statische Strings (`contract_id`, `core_info`, `status_name`) | Core | nie | prozessweit gültig, UTF-8, NUL-terminiert |
 | `user_data` des Callbacks | Host | Host, **im Callback** (oder sofort, wenn `subscribe` ≠ `WABI_OK`) | Core fasst den Zeiger nie an, reicht ihn nur durch |
@@ -385,7 +416,7 @@ Zahlen, größer, langsamer).
 
 * Alle `out`-Parameter werden auf **jedem** Pfad beschrieben (auch im Fehlerfall),
   `NULL`-Out-Zeiger → `WABI_ERR_INVALID_ARGUMENT`.
-* Ein Host DARF `wabi_buffer_free` nie mit einem eigenen Allocator mischen:
+* Ein Host DARF `demo_client_buffer_free` nie mit einem eigenen Allocator mischen:
   Rust gibt `Box<[u8]>` frei, Go `C.free`, Zig `c_allocator.free` — genau
   deshalb besitzt jede Bibliothek ihr eigenes `free`.
 * Strings sind überall UTF-8. C#/Java-Strings (UTF-16) werden strikt
@@ -395,9 +426,9 @@ Zahlen, größer, langsamer).
 ## 8. Streams
 
 ```c
-wabi_status wabi_stream_next(stream, &future);   // Pull: Future auf das nächste Element
-wabi_status wabi_stream_cancel(stream);          // Producer stoppen
-wabi_status wabi_stream_drop(stream);            // cancel + freigeben
+wabi_status demo_client_stream_next(stream, &future);   // Pull: Future auf das nächste Element
+wabi_status demo_client_stream_cancel(stream);          // Producer stoppen
+wabi_status demo_client_stream_drop(stream);            // cancel + freigeben
 ```
 
 * Streams entstehen als Rückgabewert von WIT-Funktionen (`events: func() ->
@@ -409,7 +440,7 @@ wabi_status wabi_stream_drop(stream);            // cancel + freigeben
 * **Abbruch eines einzelnen `next`** verwirft nur diesen Pull, **kein Element
   geht verloren** (Rust: `Stream::poll_next` ist cancel-safe; Go: ein bereits
   entnommenes Element wird zurückgelegt).
-* `wabi_stream_cancel`: offenes `next` → `WABI_ERR_CANCELLED`, alle späteren →
+* `demo_client_stream_cancel`: offenes `next` → `WABI_ERR_CANCELLED`, alle späteren →
   `WABI_STREAM_END`. Idempotent.
 * SDK-Mapping: C# `IAsyncEnumerable<T>`, Java `Flow.Publisher<T>` (Demand →
   `next`), Swift `AsyncSequence` (`WabiStream<T>`), Python `AsyncIterator`,
@@ -421,10 +452,10 @@ wabi_status wabi_stream_drop(stream);            // cancel + freigeben
    ungültiges Handle, kaputter Payload, unbekannte Methode, Panic im Core
    (`WABI_ERR_INTERNAL`; Cores fangen Panics an der Grenze ab). SDKs werfen
    `WabiNativeException` / `WabiRuntimeError.native`.
-2. **Domain-Fehler** aus WIT (`result<customer, client-error>`) sind **Daten**
-   im Payload (`[1, E]`), nie ein Status. SDKs mappen sie auf
-   `ClientException` (C#, Java; in Java innerhalb von
-   `CompletionException`/`ExecutionException`) bzw. `throws ClientError` (Swift).
+2. **Domain-Fehler** aus WIT-Ergebnistypen (`result<T, E>`) sind **Daten**
+   im Payload (`[1, E]`), nie ein Status. SDKs mappen sie auf die aus dem WIT-Vertrag generierten Fehlertypen
+   (in Java bei async-Aufrufen innerhalb von
+   `CompletionException`/`ExecutionException`).
 3. **Abbruch** ist `WABI_ERR_CANCELLED` → `OperationCanceledException`,
    `CancellationException`, `CancellationError`.
 

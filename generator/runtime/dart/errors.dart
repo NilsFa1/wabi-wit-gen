@@ -1,7 +1,7 @@
 // Hand-written, generic exception hierarchy.
 
 /// Base class of every runtime-level exception of the Wabi SDK. Contract errors
-/// (e.g. `ClientError`) are thrown directly and are not subclasses of this.
+/// declared by the WIT contract are thrown directly and are not subclasses of this.
 class WabiException implements Exception {
   WabiException(this.message);
   final String message;

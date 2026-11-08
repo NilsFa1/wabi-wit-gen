@@ -1,6 +1,6 @@
 {
   "name": "@nfails/wabi-wit-gen",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "WIT → SDKs (C#, Java/Android, Swift, Dart/Flutter, TypeScript/Bun) + core glue (Rust, Go, C#) over one stable native ABI. Runs as WebAssembly: no native install.",
   "keywords": [
     "wit",

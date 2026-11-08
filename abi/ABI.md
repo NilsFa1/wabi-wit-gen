@@ -39,16 +39,15 @@ abgeleitet aus dem Paketnamen: `<namespace>_<name>` in snake_case.
 
 | WIT-Paket | Präfix | Symbole | Bibliothek |
 |---|---|---|---|
-| `demo:client` | `demo_client` | `demo_client_call_sync`, `demo_client_future_take`, … | `libdemo_client.so` / `demo_client.dll` |
-| `geo:lib` | `geo_lib` | `geo_lib_call_sync`, … | `libgeo_lib.so` |
+| `<namespace>:<name>` | `<symbol_prefix>` | `<symbol_prefix>_call_sync`, `<symbol_prefix>_future_take`, … | `lib<symbol_prefix>.so` / `<symbol_prefix>.dll` |
 
 * **Warum:** Mehrere Cores bzw. Pakete können im selben Prozess leben, auch
   **statisch in eine Binary gelinkt** (iOS-xcframework, Rust-Core mit
   eingebetteter Go/Zig-Bibliothek). Mit gemeinsamen Namen würde das Linken
   fehlschlagen (`multiple definition of …`) oder, bei dynamischen
   Bibliotheken, ein Core still den anderen überdecken.
-  `tests/abi/multi_package.c` linkt zwei Cores unter `demo_client` und
-  `geo_lib` statisch in ein Programm und ruft beide auf.
+  Jeder Core muss dazu den Präfix seines eigenen WIT-Pakets exportieren.
+  Ein Integrationstest mit mehreren Paketen muss die unabhängige Auflösung prüfen.
 * **Unverändert gemeinsam** sind die Typen (`wabi_bytes`, `wabi_buffer`,
   `wabi_status`, `wabi_future_callback`, …), Statuscodes und Capabilities in
   `wabi_abi.h`. Sie sind für alle Pakete identisch.
@@ -68,15 +67,15 @@ abgeleitet aus dem Paketnamen: `<namespace>_<name>` in snake_case.
 |---|---|
 | `wabi_abi_version()` | `(major << 16) \| minor` der ABI |
 | `wabi_abi_capabilities()` | Bitmaske `WABI_CAP_*` |
-| `wabi_contract_id()` | WIT-Paket inkl. Version, z. B. `demo:client@1.0.0` |
-| `wabi_core_info()` | Freitext zur Diagnose, z. B. `demo-go-core/0.1.0` |
+| `wabi_contract_id()` | WIT-Paket inkl. Version, z. B. `<contract_id>` |
+| `wabi_core_info()` | Freitext zur Diagnose, z. B. eine Beschreibung der Core-Implementierung |
 
 Ein SDK MUSS beim Laden prüfen und bei Verletzung mit einem eigenen Fehlertyp
 abbrechen (`WabiIncompatibleLibraryException` / `WabiRuntimeError.incompatibleLibrary`),
 bevor es irgendeine andere Funktion aufruft:
 
 * **ABI:** gleiche Major-Version, Core-Minor ≥ SDK-Minor.
-* **Contract:** gleiches WIT-Paket (`demo:client`), gleiche Major-Version,
+* **Contract:** gleiches WIT-Paket (`<namespace>:<name>`), gleiche Major-Version,
   Core-Minor ≥ SDK-Minor. Ein neuerer Core darf Funktionen *hinzufügen*
   (Method-IDs ändern sich nie, §10), ein älterer SDK nutzt sie nur nicht.
 * **Capabilities:** Pflicht sind `SYNC_CALLS`, `ASYNC_CALLS`, `STREAMS`,
@@ -199,9 +198,9 @@ wertvoller.
 
 ## 4a. Host-Calls (ABI 1.1 und 1.2): der Core ruft die App
 
-Importiert eine WIT-Welt ein Interface (`import host-keys;`), implementiert
-**die App** dessen Funktionen und der Core ruft sie auf, z. B. „signiere mit dem
-Schlüssel im Secure Enclave / Android Keystore“. Dafür gibt es **optionale**
+Importiert eine WIT-Welt ein Interface, implementiert **die App** dessen
+Funktionen und der Core ruft sie auf. Die konkreten Imports werden vom
+WIT-Vertrag des Pakets festgelegt. Dafür gibt es **optionale**
 Funktionen und zwei Capability-Bits; Pakete ohne Imports brauchen weiterhin nur
 ABI 1.0.
 
@@ -260,23 +259,24 @@ asynchron auf einem anderen Thread ankommen (Dart-Isolate, JS-Event-Loop),
 halten ihre Trampoline trotzdem für die Lebensdauer des Backends, weil ein
 bereits zugestellter Aufruf dort noch in der Warteschlange stehen kann.
 
-Generisches Beispiel für ein importiertes Interface `host-keys`; diese Namen
-gehören nicht zwingend zum Vertrag des Nutzerprojekts:
+Die App implementiert die aus den WIT-Imports erzeugten Host-Schnittstellen.
+Die Registrierung kann prozessweit oder für eine einzelne Ressourceninstanz
+angelegt werden. Eine Registrierung für eine Instanz hat Vorrang vor der
+prozessweiten und endet mit dieser Instanz.
 
-| Sprache | App implementiert | Registrierung | Abbruch kommt an als |
-|---|---|---|---|
-| C# | `IHostKeys` (`Task<T>`, Domänenfehler als `ClientException`) | `ClientHost.Register(app)` bzw. `Register(client, app)` | `CancellationToken` (letzter Parameter) |
-| Java | `HostKeys` (`CompletionStage<T>`) | `ClientHost.register(app)` bzw. `register(client, app)` | `cancel(true)` auf der zurückgegebenen Stage |
-| Dart/Flutter | `HostKeys` (`Future<T>`, wirft `ClientError…`) | `ClientHost.register(app)` bzw. `registerFor(client, app)` | `CancellationToken` (letzter Parameter) |
-| Swift | `HostKeys` (`async throws`) | `ClientHost.register(hostKeys:)` bzw. `register(for:hostKeys:)` | Abbruch des Tasks, in dem die Funktion läuft |
-| TypeScript (Bun) | `HostKeys` (`Promise<T>` oder synchron) | `ClientHost.register(app)` bzw. `registerFor(client, app)` | `AbortSignal` (letzter Parameter) |
-| Rust (Core) | ruft `host_keys::sign(…).await` (generiert) | – | Future wird verworfen → `on_cancel` |
-| Go (Core) | ruft `HostKeysSign(ctx, …)` (generiert) | – | `ctx` endet → `on_cancel` |
-| C# (Core, NativeAOT) | ruft `HostKeys.SignAsync(…, token)` | – | Token → `on_cancel` |
+| Sprache | Ausführung der Import-Funktion | Abbruch kommt an als |
+|---|---|---|
+| C# | `Task<T>`; Domänenfehler über die generierten Fehlertypen | `CancellationToken` |
+| Java | `CompletionStage<T>` | `cancel(true)` auf der zurückgegebenen Stage |
+| Dart/Flutter | `Future<T>`; Domänenfehler über die generierten Fehlertypen | `CancellationToken` |
+| Swift | `async throws` | Abbruch des ausführenden Tasks |
+| TypeScript (Bun) | `Promise<T>` oder synchron | `AbortSignal` |
+| Rust (Core) | generierter async-Import-Aufruf | Future wird verworfen → `on_cancel` |
+| Go (Core) | generierter Import-Aufruf mit Kontext | Kontext endet → `on_cancel` |
+| C# (Core, NativeAOT) | generierter Import-Aufruf mit Token | Token → `on_cancel` |
 
-Eine Registrierung für eine Instanz hat Vorrang vor der prozessweiten und endet
-mit der Instanz. Im obigen Beispiel signiert das importierte Interface `host-keys` jeden HTTP-Request mit einem
-Schlüssel, der in der App bleibt. Dieses Verhalten muss ein eigener Host-Call-Integrationstest prüfen.
+Das Zusammenspiel von Registrierung, Instanzzuordnung und Abbruch muss ein
+eigener Host-Call-Integrationstest für die Imports des Pakets prüfen.
 
 ## 5. Payload-Encoding v1
 
@@ -340,7 +340,7 @@ andere ab.
 | Versionierung | Struct-Layouts einfrieren; neue Felder = neue Structs | Feld-Tags, optionale Felder, überspringbar |
 | Core-Austausch | jeder Core muss exakte Layouts, Alignment, Ownership pro Typ nachbauen | ein Codec + ein Dispatcher |
 | Generator | pro Sprache Marshalling-Code für Structs, Listen, Optionals, Strings | nur „Wert → Bytes“ |
-| Speicher-Ownership | pro Feld zu regeln (wer gibt den `char*` in `customer.email` frei?) | genau zwei Puffertypen, eine Regel (§7) |
+| Speicher-Ownership | pro Feld zu regeln (wer gibt ein zurückgegebenes String-Feld frei?) | genau zwei Puffertypen, eine Regel (§7) |
 | Debugbarkeit | Speicherdumps | Payloads mit jedem MessagePack-Tool lesbar |
 | Component Model | eigenes Layout ≠ Canonical ABI | Werte-Modell 1:1 aus WIT, leicht auf Canonical ABI abbildbar |
 
@@ -421,10 +421,10 @@ wabi_status wabi_stream_drop(stream);            // cancel + freigeben
    ungültiges Handle, kaputter Payload, unbekannte Methode, Panic im Core
    (`WABI_ERR_INTERNAL`; Cores fangen Panics an der Grenze ab). SDKs werfen
    `WabiNativeException` / `WabiRuntimeError.native`.
-2. **Domain-Fehler** aus WIT (`result<customer, client-error>`) sind **Daten**
-   im Payload (`[1, E]`), nie ein Status. SDKs mappen sie auf
-   `ClientException` (C#, Java; in Java innerhalb von
-   `CompletionException`/`ExecutionException`) bzw. `throws ClientError` (Swift).
+2. **Domain-Fehler** aus WIT-Ergebnistypen (`result<T, E>`) sind **Daten**
+   im Payload (`[1, E]`), nie ein Status. SDKs mappen sie auf die aus dem WIT-Vertrag generierten Fehlertypen
+   (in Java bei async-Aufrufen innerhalb von
+   `CompletionException`/`ExecutionException`).
 3. **Abbruch** ist `WABI_ERR_CANCELLED` → `OperationCanceledException`,
    `CancellationException`, `CancellationError`.
 
@@ -464,8 +464,8 @@ ABI (langsamer, fehleranfällig).
 ## 11. Checkliste: einen neuen Core implementieren
 
 1. Die 17 Funktionen aus `wabi_abi_functions.h` **unter dem Präfix des
-   Pakets** exportieren (C-Linkage, `WABI_API`), z. B. `demo_client_call_sync`
-   (§1.1). Rust: generierte `#[export_name]`-Wrapper; Go: `//export demo_client_…`
+   Pakets** exportieren (C-Linkage, `WABI_API`), z. B. `<symbol_prefix>_call_sync`
+   (§1.1). Rust: generierte `#[export_name]`-Wrapper; Go: `//export <symbol_prefix>_…`
    mit nur `wabi_abi.h` im cgo-Preamble; Zig: `@export(…, .{ .name = prefix ++ "_…" })`;
    C#: `[UnmanagedCallersOnly(EntryPoint = Prefix + "…")]`.
 2. Handle-Tabelle mit nie wiederverwendeten 64-Bit-Handles (§3).

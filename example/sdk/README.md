@@ -105,7 +105,7 @@ All commands below run from this output directory. Example commands require
 a prior `--scaffold examples` run. They load and validate metadata without
 calling application methods, whose valid arguments depend on your contract.
 
-- .NET: `dotnet pack csharp -c Release`; native files are included under
+- .NET 10: `dotnet pack csharp -c Release`; native files are included under
   `runtimes/<rid>/native/`. Starter: `dotnet run --project examples/csharp`.
 - Java: `bash java/build.sh` builds jars and the JNI shim. Use JDK 22+
   for Panama (with native access enabled), or JDK 17+/Android with JNI.

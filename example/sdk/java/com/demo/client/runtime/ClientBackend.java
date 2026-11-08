@@ -8,7 +8,7 @@ import java.util.concurrent.Flow;
 import java.util.function.LongSupplier;
 
 public interface ClientBackend {
-    /** Decodes a result payload; may throw (e.g. a generated ClientException). */
+    /** Decodes a result payload; may throw a generated contract exception. */
     @FunctionalInterface
     interface Decoder<T> {
         T decode(byte[] payload);

@@ -5,17 +5,15 @@
  * Every WIT package exports these functions under its own SYMBOL PREFIX,
  * derived from the package name (ABI.md §1.1):
  *
- * Examples only (use your own WIT package):
- *
- *     demo:client  ->  demo_client_call_sync, demo_client_future_take, ...
- *     geo:lib      ->  geo_lib_call_sync, ...
+ * The prefix is selected by the WIT contract. Generated SDK copies include
+ * concrete examples for that package.
  *
  * so several cores/packages can live in one process — even statically linked
  * into one binary (iOS xcframework) — without symbol clashes.
  *
  * Usage (normally via the generated c/<prefix>.h):
  *
- *     #define WABI_PREFIX demo_client
+ *     #define WABI_PREFIX <symbol_prefix>
  *     #include "wabi_abi_functions.h"
  *     #undef WABI_PREFIX
  *
@@ -24,7 +22,7 @@
 #include "wabi_abi.h"
 
 #ifndef WABI_PREFIX
-#  error "define WABI_PREFIX (the package symbol prefix, e.g. demo_client) before including wabi_abi_functions.h"
+#  error "define WABI_PREFIX (the package symbol prefix) before including wabi_abi_functions.h"
 #endif
 
 #ifndef WABI_FN
@@ -44,8 +42,8 @@ extern "C" {
 WABI_API uint32_t WABI_FN(abi_version)(void);
 WABI_API uint64_t WABI_FN(abi_capabilities)(void);
 /* Static NUL-terminated UTF-8 strings owned by the library (never freed). */
-WABI_API const char *WABI_FN(contract_id)(void);   /* e.g. "demo:client@1.0.0"      */
-WABI_API const char *WABI_FN(core_info)(void);     /* e.g. "rust-core/0.1.0 tokio"  */
+WABI_API const char *WABI_FN(contract_id)(void);   /* WIT package and its version */
+WABI_API const char *WABI_FN(core_info)(void);     /* implementation description */
 WABI_API const char *WABI_FN(status_name)(wabi_status status);
 
 /* ------------------------------------------------------------------------ */

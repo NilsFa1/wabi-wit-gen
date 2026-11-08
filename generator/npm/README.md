@@ -81,7 +81,7 @@ oder eines Felds, vergibt der Generator eine neue ID und legt die alte still.
 sdk/
   abi/                 wabi_abi.h, wabi_abi_functions.h, ABI.md (normative Spezifikation)
   c/<präfix>.h         die Symbole dieses Pakets (demo_greeter_call_async, …)
-  csharp/              C#-SDK + Runtime (Namespace Demo.Greeter.Runtime), net8.0,
+  csharp/              C#-SDK + Runtime (Namespace Demo.Greeter.Runtime), net10.0,
                        Demo.Greeter.csproj -> `dotnet pack` = NuGet-Paket inkl. nativer Bibliotheken
   java/                Java-SDK + Runtime (com.demo.greeter.runtime): Panama (JDK 22+) und JNI;
                        build.sh -> Jar, Android-Jar und JNI-Shim
@@ -174,7 +174,7 @@ nebeneinander in einem Prozess liegen.
 
 | Sprache | Voraussetzung |
 |---|---|
-| C# | .NET 8 |
+| C# | .NET 10 |
 | Java | JDK 22+ (Panama) oder JDK 17+/Android (JNI-Shim) |
 | Swift | Swift 5.9, macOS 12 / iOS 15 |
 | Dart | Dart ≥ 3.10 bzw. Flutter ≥ 3.38 (native assets), Pakete `ffi`, `hooks`, `code_assets`, `crypto` |
@@ -235,3 +235,15 @@ unimplementierte Methoden; neue WIT-Methoden erfordern eine Ergänzung im eigene
 Core. Die paketbezogene `sdk/README.md` beschreibt Build und Bibliotheksablage für
 die tatsächlich gewählten Cores. Ohne gewählten Core ist eine passende native
 Bibliothek bereitzustellen.
+
+Ab Generatorversion 0.2.0 zielen die erzeugten C#-SDKs und Core-/App-Gerüste auf
+`net10.0`. Bereits vorhandene Scaffold-Projektdateien bleiben unverändert;
+ihr `<TargetFramework>` muss bei einer Migration von Hand angepasst werden.
+Die normale NativeAOT-Optimierungsstrategie bleibt erhalten; eine zusätzliche
+Größenoptimierung wird nicht automatisch aktiviert.
+
+Die mitgelieferten ABI-Dokumente und Header verwenden in SDK-Ausgaben die
+Paketnamen, Symbolpräfixe und Beispieltypen aus dem WIT-Vertrag. Record- und
+Ergebnisbeispiele zeigen tatsächlich deklarierte Typen; Verträge ohne solche
+Typen erhalten eine neutrale Erklärung. Gemeinsame Runtime-Kommentare enthalten
+keine fachlichen Typen eines Referenzprojekts.

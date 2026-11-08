@@ -30,12 +30,16 @@ function tree(dir, metadata = false) {
 }
 
 try {
-  for (const [namespace, pkg] of [['alpha', 'archive-reader'], ['beta', 'volume-tools']]) {
+  for (const [namespace, pkg] of [['alpha', 'archive-reader'], ['beta', 'volume-tools'], ['backup', 'tibx-reader']]) {
     for (const core of ['none', 'rust', 'go', 'csharp']) {
       const result = [];
       for (const [runner, command] of [['native', [native]], ['wasm', [process.execPath, launcher]]]) {
         const cwd = join(root, `${namespace}-${pkg}-${core}-${runner}`); mkdirSync(join(cwd, 'wit'), { recursive: true });
-        const source = `package ${namespace}:${pkg}@1.0.0; interface api { resource reader { constructor(); ping: func() -> u32; } } world api-world { export api; }\n`;
+        const record = namespace === 'beta' ? 'volume-info' : 'archive-entry';
+        const error = namespace === 'beta' ? 'volume-error' : 'reader-error';
+        const hasImports = namespace === 'backup';
+        const host = hasImports ? `interface filesystem { use types.{${error}}; read: func(path: string) -> result<list<u8>, ${error}>; }` : '';
+        const source = `package ${namespace}:${pkg}@1.0.0; interface types { record ${record} { path: string, size: u64, } variant ${error} { not-found, } } ${host} interface api { use types.{${record}, ${error}}; resource reader { constructor(); ping: func() -> u32; entries: func() -> result<list<${record}>, ${error}>; } } world api-world { ${hasImports ? 'import filesystem;' : ''} export api; }\n`;
         writeFileSync(join(cwd, 'wit/api.wit'), source);
         const args = ['wit', '--out', 'sdk', '--target', 'csharp,java,swift,dart,ts', '--core', core, '--scaffold', 'examples'];
         const initial = tree(cwd, true);
@@ -47,6 +51,13 @@ try {
         const pn = pkg.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('');
         const nn = namespace[0].toUpperCase() + namespace.slice(1);
         const ns = `${nn}.${pn}`, module = `${nn}${pn}`, jp = `com/${namespace}/${pkg.replaceAll('-', '_')}/runtime`;
+        const abiDoc = sdk['abi/ABI.md'];
+        assert(abiDoc.includes(`WIT-Paket: \`${namespace}:${pkg}\``));
+        assert(abiDoc.includes(`record ${record} {`));
+        assert(abiDoc.includes(`result<list<${record}>, ${error}>`));
+        if (hasImports) assert(abiDoc.includes('import filesystem;'));
+        else assert(abiDoc.includes('keine Host-Imports'));
+        assert(sdk['abi/wabi_abi_functions.h'].includes(`#define WABI_PREFIX ${prefix}`));
         assert(sdk['csharp/NativeAbi.g.cs'].includes(`namespace ${ns}.Runtime;`));
         assert(sdk['csharp/NativeAbi.g.cs'].includes(`SymbolPrefix = "${prefix}_"`));
         assert(sdk[`java/${jp}/AbiConstants.java`].includes(`LIBRARY = "${prefix}"`));
@@ -57,7 +68,7 @@ try {
         assert(sdk['dart/lib/src/generated/abi_constants.dart'].includes(`library = '${prefix}'`));
         assert(sdk['ts/abi_constants.ts'].includes(`symbolPrefix: "${prefix}_"`));
         for (const [path, text] of Object.entries(sdk)) {
-          assert(!/wabi_client|Wabi\.Client|com\.wabi\.client|@LIBRARY@|@JNI_CLASS@/.test(text), `reference package in ${path}`);
+          assert(!/wabi_client|Wabi\.Client|com\.wabi\.client|@LIBRARY@|@JNI_CLASS@|demo_client|geo_lib|demo:client|customer|Customer|ClientError|ClientException|DemoGreeter|CWabiClient|host-keys|<symbol_prefix>|<contract_id>/.test(text), `reference package in ${path}`);
           if (path.endsWith('.md')) {
             for (const [, link] of text.matchAll(/\]\(([^)]+)\)/g)) {
               if (/^(https?:|#)/.test(link)) continue;
@@ -72,6 +83,12 @@ try {
         if (core === 'csharp') {
           assert(sdk['README.md'].includes('dotnet publish core-csharp/Core.csproj'));
           assert(sdk['README.md'].includes(`native/linux-x64/lib${prefix}.so`));
+        }
+        for (const [path, text] of Object.entries(sdk)) {
+          if (path.endsWith('.csproj')) {
+            assert(text.includes('<TargetFramework>net10.0</TargetFramework>'), path);
+            assert(!text.includes('net8.0'), path);
+          }
         }
         const before = tree(cwd, true);
         run(command, cwd, []); // project config, no repeated options

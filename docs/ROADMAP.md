@@ -19,8 +19,12 @@
 * **Java als Core-Sprache** (GraalVM native-image): unfertig (keine Streams,
   keine Host-Calls, nur Linux) und deshalb aus diesem Stand entfernt; der Code
   liegt auf dem Branch `java-core`.
-* **JS außerhalb von Bun:** Browser (Core als WebAssembly-Komponente, siehe
-  [COMPONENT_MODEL.md](COMPONENT_MODEL.md)) und Node (N-API statt `bun:ffi`).
+* **JavaScript im Browser:** Rust-Core als WebAssembly mit eigenem `WasmBackend`,
+  browserfähigem ESM-Paket, Fetch/SSE und bestehender SDK-Oberfläche. Zuerst
+  `wasm-bindgen`, Component Model als spätere Option. Konkrete Arbeitspakete,
+  technische Grenzen und Abnahmekriterien: [WEBASSEMBLY.md](WEBASSEMBLY.md).
+  Der Generator selbst im Browser ist dort als separates Vorhaben beschrieben.
+* **Node nativ:** N-API statt `bun:ffi`; getrennt vom Browser-Backend.
 * **Emitter in TypeScript:** `wabi-wit-gen` parst WIT mit `wit-parser` und
   vergibt die IDs; die Emitter pro Sprache sind reines String-Templating und
   könnten aus einer serialisierten IR (`model.json`) auch in Bun/TypeScript

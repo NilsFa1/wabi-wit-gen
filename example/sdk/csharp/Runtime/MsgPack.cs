@@ -1,6 +1,6 @@
 // Copied by wabi-wit-gen from generator/runtime — DO NOT EDIT; change the source there.
 // Hand-written, generic: payload encoding v1 (MessagePack subset, ABI.md §5).
-// Knows nothing about customers, clients or any other contract type.
+// Has no dependency on the types declared in the WIT contract.
 #nullable enable
 using System;
 using System.Buffers.Binary;

@@ -2,7 +2,7 @@
  * libwabi_jni — JNI shim of a Wabi Java SDK (Android, JDK 17+).
  *
  * Hand-written, contract-agnostic: it knows the 17 ABI functions of
- * abi/wabi_abi_functions.h and nothing about customers, clients or method ids.
+ * abi/wabi_abi_functions.h and has no dependency on application-specific types or method ids.
  * The package's symbol prefix ("@LIBRARY@_") is passed in at run time; new
  * WIT functions never require changes. wabi-wit-gen copies it into every
  * package (java/jni) with the package's library name and JNI class,

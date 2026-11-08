@@ -1,3 +1,5 @@
+/* ABI for demo:client@1.0.0.
+ */
 /*
  * wabi_abi.h — Wabi stable native ABI, version 1.0: types and constants
  *
@@ -17,7 +19,7 @@
  * This header holds everything that is identical for every WIT package
  * (types, status codes, capabilities). The functions are package-specific
  * only in their symbol prefix and live in wabi_abi_functions.h; each package
- * gets a small generated header (c/<prefix>.h) that binds them.
+ * gets a small generated header (c/demo_client.h) that binds them.
  */
 #ifndef WABI_ABI_H
 #define WABI_ABI_H
@@ -51,10 +53,10 @@ extern "C" {
  * core's minor is >= the minor the host was generated against. */
 #define WABI_ABI_VERSION ((WABI_ABI_VERSION_MAJOR << 16) | WABI_ABI_VERSION_MINOR)
 
-/* Capability bits reported by <prefix>_abi_capabilities(). Unknown bits must be
+/* Capability bits reported by demo_client_abi_capabilities(). Unknown bits must be
  * ignored by hosts. */
-#define WABI_CAP_SYNC_CALLS        (1ull << 0) /* <prefix>_call_sync                      */
-#define WABI_CAP_ASYNC_CALLS       (1ull << 1) /* <prefix>_call_async + wabi_future_*     */
+#define WABI_CAP_SYNC_CALLS        (1ull << 0) /* demo_client_call_sync                      */
+#define WABI_CAP_ASYNC_CALLS       (1ull << 1) /* demo_client_call_async + wabi_future_*     */
 #define WABI_CAP_STREAMS           (1ull << 2) /* wabi_stream_*                       */
 #define WABI_CAP_CANCELLATION      (1ull << 3) /* cancel interrupts in-flight work (informative) */
 #define WABI_CAP_THREADED_CALLBACK (1ull << 4) /* futures may complete later, callbacks come
@@ -62,9 +64,9 @@ extern "C" {
                                                   completes every future before returning it) */
 #define WABI_CAP_PAYLOAD_MSGPACK_1 (1ull << 5) /* payload encoding v1 (ABI.md §5)     */
 #define WABI_CAP_HOST_CALLS        (1ull << 6) /* ABI 1.1: core calls host-implemented
-                                                  WIT imports (<prefix>_host_register,
-                                                  <prefix>_host_reply; ABI.md §4a) */
-#define WABI_CAP_HOST_CALLS_2      (1ull << 7) /* ABI 1.2: <prefix>_host_register2 (the handler
+                                                  WIT imports (demo_client_host_register,
+                                                  demo_client_host_reply; ABI.md §4a) */
+#define WABI_CAP_HOST_CALLS_2      (1ull << 7) /* ABI 1.2: demo_client_host_register2 (the handler
                                                   learns the instance, the host learns about
                                                   abandoned calls; ABI.md §4a) */
 
@@ -88,7 +90,7 @@ typedef struct wabi_bytes {
 } wabi_bytes;
 
 /* Owned bytes, core -> host. Allocated by the core, owned by the host after the
- * call returns, released with <prefix>_buffer_free() of the SAME library, passing
+ * call returns, released with demo_client_buffer_free() of the SAME library, passing
  * back exactly the ptr/len received. {NULL, 0} is the empty buffer; freeing
  * it is a no-op. Hosts must never free it with their own allocator. */
 typedef struct wabi_buffer {
@@ -99,7 +101,7 @@ typedef struct wabi_buffer {
 typedef int32_t wabi_status;
 
 /* >= 0: success / informational, < 0: failure. Domain errors from WIT
- * (e.g. client-error.not-found) are NOT statuses: they are part of the
+ * declared by the WIT contract are NOT statuses: they are part of the
  * encoded result payload (result<T, E> -> [1, E]). Statuses only describe
  * ABI-level conditions. */
 #define WABI_OK                    0
@@ -116,21 +118,21 @@ typedef int32_t wabi_status;
 #define WABI_ERR_INTERNAL         -8  /* bug/panic inside the core                    */
 
 /* Completion callback. See ABI.md §4 for the full contract; in short:
- *   - invoked EXACTLY ONCE per <prefix>_future_subscribe() that returned WABI_OK,
+ *   - invoked EXACTLY ONCE per demo_client_future_subscribe() that returned WABI_OK,
  *     including when the future is cancelled or dropped,
  *   - never invoked from inside an ABI call made by the host (no reentrancy
  *     into host frames), always from a core-owned thread,
  *   - may run concurrently with other callbacks and with host calls,
  *   - must return quickly: no blocking, no waiting on other futures,
  *   - may call any ABI function (e.g. wabi_future_take).
- * It carries no result; the host calls <prefix>_future_take() afterwards. */
+ * It carries no result; the host calls demo_client_future_take() afterwards. */
 typedef void (*wabi_future_callback)(void *user_data, wabi_future_handle future);
 
 /* Host-call handler (ABI 1.1, ABI.md §4a): the CORE calls the HOST to run a
  * function of a WIT *import* (e.g. "sign with the key in the Secure Enclave").
  *   - invoked on a core thread, never inside an ABI call made by the host,
  *   - must return quickly; the host answers LATER, from any thread, with
- *     exactly one <prefix>_host_reply(call, ...),
+ *     exactly one demo_client_host_reply(call, ...),
  *   - request/request_len stay valid until that reply (so the host may read
  *     them asynchronously); they encode the import's parameters (§5),
  *   - may be invoked concurrently for different calls.
@@ -147,7 +149,7 @@ typedef void (*wabi_host_handler2)(void *user_data, wabi_object_handle object, u
 
 /* Cancellation of a host call (ABI 1.2): the core no longer waits for `call`
  * (the surrounding operation was cancelled or its object dropped). The host
- * should stop working on it; it MUST still answer with <prefix>_host_reply()
+ * should stop working on it; it MUST still answer with demo_client_host_reply()
  * exactly once (the answer is discarded and releases the request). Invoked at
  * most once per call, on a core thread, never inside an ABI call made by the
  * host; it may race with the host's own reply. Must return quickly. */

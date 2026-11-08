@@ -42,7 +42,7 @@ Das ergibt sich direkt aus [`ABI.md`](../abi/ABI.md) §11:
 | 4. Fremde Threads | NativeAOT hängt fremde Threads automatisch an | ✅ (JVM-, Dart-, CoreCLR-Threads getestet) |
 | 5. Exceptions | `try/catch` in jedem Export → `WABI_ERR_INTERNAL` | ✅ |
 | 6. Async | `async/await`, `Task`, `Channel<T>`, `CancellationToken` | ✅ Race-Tests, Abbruch, Streams |
-| 7. Plattformen | Linux/Windows/macOS: offiziell unterstützt. iOS: NativeAOT seit .NET 8 (vor dem Einsatz den aktuellen Support-Status der verwendeten .NET-Version prüfen). **Android: der schwächste Punkt**, NativeAOT für Android (`linux-bionic`) war lange experimentell; vor einer Entscheidung für Android gezielt verifizieren | ⚠️ Android prüfen |
+| 7. Plattformen | Linux/Windows/macOS: offiziell unterstützt. iOS: NativeAOT ab .NET 9 regulär unterstützt. **Android bleibt experimentell**; den konkreten NativeAOT-Shared-Library-Build vor dem Einsatz auf Zielgeräten prüfen | ⚠️ Android prüfen |
 | 8. Netzwerk/Krypto | `HttpClient` und `System.Security.Cryptography` (AES-GCM, HMAC) aus der BCL. Unter Linux nutzt die Krypto zur Laufzeit OpenSSL | ✅ |
 
 **Besonderheit:** Der C#-Core verwendet die **generierten** C#-Typen und den

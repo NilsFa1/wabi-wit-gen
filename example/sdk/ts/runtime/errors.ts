@@ -3,7 +3,7 @@
 
 /**
  * Base class of every runtime-level exception of the Wabi SDK. Contract errors
- * (e.g. `ClientException`) derive from it as well, so `instanceof WabiException`
+ * derive from it as well, so `instanceof WabiException`
  * catches everything the SDK throws.
  */
 export class WabiException extends Error {

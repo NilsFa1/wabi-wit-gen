@@ -99,7 +99,7 @@ typedef struct wabi_buffer {
 typedef int32_t wabi_status;
 
 /* >= 0: success / informational, < 0: failure. Domain errors from WIT
- * (e.g. client-error.not-found) are NOT statuses: they are part of the
+ * declared by the WIT contract are NOT statuses: they are part of the
  * encoded result payload (result<T, E> -> [1, E]). Statuses only describe
  * ABI-level conditions. */
 #define WABI_OK                    0

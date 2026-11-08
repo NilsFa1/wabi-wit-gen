@@ -19,6 +19,7 @@ macro_rules! w {
 }
 
 mod abi_table;
+mod abi_docs;
 mod config;
 mod scaffold;
 mod api;
@@ -271,7 +272,7 @@ fn sdk_outputs_all(out: &Path, model: &ir::Model, targets: &[String], cores: &[C
         targets.push("csharp".into());
         writeln!(notes, "  (--target csharp added: the C# core reuses the contract types and MessagePack of the C# SDK)").unwrap();
     }
-    let abi = runtime::abi();
+    let abi = runtime::abi_for(model);
     for (name, text) in &abi {
         outputs.push((out.join("abi").join(name), text.clone()));
     }
@@ -493,6 +494,13 @@ mod tests {
                     assert_eq!(readme.contains(&script), core == Some(lang));
                     assert_eq!(files.iter().any(|(p,_)| p == &Path::new("sdk").join(&script)), core == Some(lang));
                 }
+                let project = &files.iter().find(|(p,_)| p.extension().is_some_and(|e| e == "csproj")).unwrap().1;
+                assert!(project.contains("<TargetFramework>net10.0</TargetFramework>"));
+                for (path, text) in scaffold::files(Path::new("sdk"), &m, &targets, &cores) {
+                    if path.extension().is_some_and(|e| e == "csproj") {
+                        assert!(text.contains("<TargetFramework>net10.0</TargetFramework>"));
+                    }
+                }
                 if core == Some("csharp") { assert!(readme.contains("dotnet publish")); }
                 let java = runtime::java_package(&m).replace('.', "/");
                 assert!(files.iter().any(|(p,t)| p == &Path::new("sdk/java").join(&java).join("AbiConstants.java") && t.contains(&format!("LIBRARY = \"{}\"", m.symbol_prefix()))));
@@ -503,6 +511,50 @@ mod tests {
                 assert!(header.contains(&format!("#define {}_SYMBOL_PREFIX \"{}_\"", m.symbol_prefix().to_ascii_uppercase(), m.symbol_prefix())));
             }
         }
+    }
+
+    #[test]
+    fn abi_examples_are_derived_from_the_contract_without_reference_domains() {
+        for (namespace, package, record, error, resource) in [
+            ("backup", "tibx-reader", "archive-entry", "reader-error", "archive"),
+            ("beta", "volume-tools", "volume-info", "volume-error", "volume"),
+            ("business", "crm", "customer", "lookup-error", "directory"),
+        ] {
+            let src = format!("package {namespace}:{package}@2.3.4; interface api {{ record {record} {{ path: string, size: u64, }} variant {error} {{ not-found, }} resource {resource} {{ constructor(); entries: func() -> result<list<{record}>, {error}>; }} }} world w {{ export api; }}");
+            let (m, lock) = build(&src, "");
+            let before = lock.clone();
+            let files = runtime::abi_for(&m);
+            let text = |name: &str| files.iter().find(|(n,_)| n == name).unwrap().1.as_str();
+            let doc = text("ABI.md");
+            let prefix = m.symbol_prefix();
+            assert!(doc.contains(&format!("`{namespace}:{package}@2.3.4`")));
+            assert!(doc.contains(&format!("{prefix}_call_sync")));
+            assert!(doc.contains(&format!("record {record} {{")));
+            assert!(doc.contains(&format!("`{prefix}_contract_id()`")));
+            assert!(!doc.contains("`wabi_call_sync`"));
+            assert!(doc.contains("`wabi_bytes`"));
+            assert!(doc.contains(&format!("result<list<{record}>, {error}>")));
+            assert!(doc.contains("keine Host-Imports"));
+            for stale in ["demo_client", "geo_lib", "demo:client", "client-error", "host-keys", "<symbol_prefix>", "<contract_id>", "<namespace>"] {
+                assert!(files.iter().all(|(_,t)| !t.contains(stale)), "unexpected {stale}");
+            }
+            if record != "customer" { assert!(files.iter().all(|(_,t)| !t.contains("customer"))); }
+            for header in ["wabi_abi.h", "wabi_abi_functions.h"] {
+                assert!(text(header).contains(&m.contract_id()));
+            }
+            assert!(text("wabi_abi_functions.h").contains(&format!("#define WABI_PREFIX {prefix}")));
+            abi_table::check_header(text("wabi_abi.h"), text("wabi_abi_functions.h")).unwrap();
+            assert_eq!(files, runtime::abi_for(&m));
+            assert_eq!(before, build(&src, &lock).1);
+        }
+        // A contract may legitimately be named like a logical ABI function.
+        let (m, _) = build("package wabi:call-sync@1.0.0; interface api { resource reader { constructor(); } } world w { export api; }", "");
+        let files = runtime::abi_for(&m);
+        let doc = &files.iter().find(|(n,_)| n == "ABI.md").unwrap().1;
+        assert!(doc.contains("Symbolpräfix: `wabi_call_sync_`"));
+        assert!(doc.contains("| `wabi:call-sync` | `wabi_call_sync` |"));
+        assert!(doc.contains("keinen Record-Typ"));
+        assert!(doc.contains("keinen WIT-`result`"));
     }
 
     #[test]

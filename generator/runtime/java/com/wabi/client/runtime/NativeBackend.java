@@ -159,7 +159,7 @@ public final class NativeBackend implements ClientBackend {
                     default -> result.completeExceptionally(error(taken.status(), taken.bytes()));
                 }
             } catch (Throwable t) {
-                result.completeExceptionally(t); // e.g. ClientException thrown by the decoder
+                result.completeExceptionally(t); // a generated contract exception from the decoder
             } finally {
                 abi.futureDrop(future);
             }

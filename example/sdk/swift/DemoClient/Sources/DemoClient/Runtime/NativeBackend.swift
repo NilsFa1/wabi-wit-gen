@@ -1,6 +1,6 @@
 // Copied by wabi-wit-gen from generator/runtime — DO NOT EDIT; change the source there.
 // Hand-written, generic: executes contract calls through the Wabi native ABI
-// (the package's C module, e.g. `CWabiClient` or `CDemoGreeter`: abi/wabi_abi.h + generated/c/<prefix>.h). No per-method code here.
+// through the package's generated C module. No per-method code here.
 
 import CDemoClient
 

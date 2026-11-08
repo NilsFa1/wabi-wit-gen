@@ -1,5 +1,5 @@
 //! The small, generic API that generated dispatch code uses to talk to the
-//! FFI runtime. Nothing here knows about customers, clients or any other WIT
+//! FFI runtime. This module has no dependency on application-specific WIT
 //! type.
 
 use crate::abi_types::*;

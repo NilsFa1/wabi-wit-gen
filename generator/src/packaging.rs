@@ -99,7 +99,7 @@ pub fn csharp_project(m: &Model) -> (String, String) {
                                     machine from ../native is copied next to the app
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>12</LangVersion>
@@ -246,7 +246,7 @@ pub fn sdk_readme(m: &Model, targets: &[String], cores: &[crate::Core]) -> Strin
     for target in targets {
         match target.as_str() {
             "ts" => s.push_str("- Bun: SDK in `ts/`; starter: `bun examples/ts/main.ts`. Set `WABI_NATIVE_LIB`.\n"),
-            "csharp" => s.push_str("- .NET: `dotnet pack csharp -c Release`; native files are included under\n  `runtimes/<rid>/native/`. Starter: `dotnet run --project examples/csharp`.\n"),
+            "csharp" => s.push_str("- .NET 10: `dotnet pack csharp -c Release`; native files are included under\n  `runtimes/<rid>/native/`. Starter: `dotnet run --project examples/csharp`.\n"),
             "dart" => s.push_str(&format!("- Dart/Flutter: depend on the local `dart/` package named `{p}`. Its hook\n  bundles the core from `native/`; alternatively configure the app's\n  `hooks.user_defines.{p}` with `library`, `prebuilt_dir` or `release_url`.\n  Starter: `cd examples/dart && dart run bin/main.dart`.\n")),
             "java" => s.push_str("- Java: `bash java/build.sh` builds jars and the JNI shim. Use JDK 22+\n  for Panama (with native access enabled), or JDK 17+/Android with JNI.\n  Starter source: `examples/java/Main.java`; compile and run with the\n  generated jar on the classpath and `WABI_NATIVE_LIB` set.\n"),
             "swift" => s.push_str(&format!("- Swift: local SwiftPM package `swift/{module}`. Pass\n  `-Xlinker -L<absolute-library-directory>` to the consuming build; ensure\n  the dynamic library is also available at runtime. Starter:\n  `cd examples/swift && swift run -Xlinker -L<absolute-library-directory>`.\n  For iOS supply a compatible xcframework and replace the system library\n  target with a binary target.\n")),

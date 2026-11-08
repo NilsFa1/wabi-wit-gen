@@ -161,7 +161,7 @@ example/generate.sh                          # nach Änderungen an example/wit/c
 example/generate.sh --check                  # CI: Lock-Datei/generierter Code aktuell?
 ```
 
-Benötigt: Rust ≥ 1.80, Go ≥ 1.22, .NET 8 (für den C#-Core zusätzlich clang und
+Benötigt: Rust ≥ 1.80, Go ≥ 1.22, .NET 10 (für den C#-Core zusätzlich clang und
 zlib-Header), JDK ≥ 22 (Panama FFM ist ab 22 final),
 Dart ≥ 3.10, Bun ≥ 1.4, OpenSSL-Header (für den C-Test der Host-Calls), Swift ≥ 5.9
 (macOS). Fehlt eine Toolchain, überspringt die Matrix die betroffenen Zeilen.
@@ -243,7 +243,9 @@ Testsuiten, bis auf die kompilierten Binaries.
 * **Unbekannte Variant-Cases** eines neueren Cores führen in älteren SDKs zu
   einem Protokollfehler.
 
-Geplantes steht in [docs/ROADMAP.md](docs/ROADMAP.md).
+Geplantes steht in [docs/ROADMAP.md](docs/ROADMAP.md). Der konkrete Plan für
+Rust-Cores als WebAssembly und JavaScript-/TypeScript-SDKs im Browser steht in
+[docs/WEBASSEMBLY.md](docs/WEBASSEMBLY.md) (noch nicht implementiert).
 
 ## Lizenz
 

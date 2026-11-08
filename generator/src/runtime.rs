@@ -111,6 +111,14 @@ pub fn abi() -> Vec<(String, String)> {
     FILES.iter().filter_map(|(rel, text)| rel.strip_prefix("abi/").map(|r| (r.to_string(), text.to_string()))).collect()
 }
 
+/// SDK copies have package-specific documentation; the canonical ABI stays shared.
+pub fn abi_for(m: &Model) -> Vec<(String, String)> {
+    abi().into_iter().map(|(name, text)| {
+        let text = crate::abi_docs::render(m, &name, &text);
+        (name, text)
+    }).collect()
+}
+
 /// Marks the copy as generated so nobody edits it in a package.
 fn banner(path: &str, text: &str) -> String {
     let line = "Copied by wabi-wit-gen from generator/runtime — DO NOT EDIT; change the source there.";
